@@ -7,7 +7,8 @@
 
 // Run this file to update all application commands
 require('dotenv').config();
-process.env['REGITER_COMMANDS'] = true;
+process.env['REGITER_COMMANDS'] = true; // legacy misspelling, still honoured
+process.env['REGISTER_COMMANDS'] = true;
 const axios = require('axios');
 const requireDir = require('require-dir');
 const dir = requireDir('../src/commands/commandList', { recurse: true });

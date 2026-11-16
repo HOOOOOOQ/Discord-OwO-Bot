@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const config = require('./../../../data/config.json');
+const config = require('../../../utils/config.js');
 const embed = {
 	content: 'This is an automated message. All responses should go to <@184587051943985152>.',
 	embed: {

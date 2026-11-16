@@ -9,7 +9,7 @@ const global = require('./global.js');
 const sender = require('./sender.js');
 const rewardUtil = require('./rewardUtil.js');
 const mysql = require('../botHandlers/mysqlHandler.js');
-const config = require('../data/config.json');
+const config = require('./config.js');
 const giveawayJson = require('../data/giveaway.json');
 let owo;
 let totalGiveawayChance = 0;

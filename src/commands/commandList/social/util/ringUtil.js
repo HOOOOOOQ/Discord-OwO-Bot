@@ -17,21 +17,24 @@ exports.buy = async function (p, id) {
 		return;
 	}
 
-	let sql = `UPDATE cowoncy SET money = money - ${ring.price} WHERE id = ${p.msg.author.id} AND money >= ${ring.price}`;
-	let result = await p.query(sql);
+	let sql = 'UPDATE cowoncy SET money = money - ? WHERE id = ? AND money >= ?';
+	let result = await p.query(sql, [ring.price, p.msg.author.id, ring.price]);
 
 	if (!result || result.changedRows < 1) {
 		p.errorMsg(', you do not have enough cowoncy! >:c', 3000);
 		return;
 	}
 
-	sql = `INSERT INTO user_ring (uid,rid,rcount) VALUES ((SELECT uid FROM user WHERE id = ${p.msg.author.id}),${ring.id},1) ON DUPLICATE KEY UPDATE rcount = rcount + 1;`;
+	sql =
+		'INSERT INTO user_ring (uid,rid,rcount) VALUES ((SELECT uid FROM user WHERE id = ?),?,1) ON DUPLICATE KEY UPDATE rcount = rcount + 1;';
+	let params = [p.msg.author.id, ring.id];
 	try {
-		await p.query(sql);
+		await p.query(sql, params);
 	} catch (e) {
-		if (e.code == 'ER_BAD_NULL_ERROR')
-			await p.query(`INSERT INTO user (id,count) VALUES (${p.msg.author.id},0); ` + sql);
-		else console.error(e);
+		if (e.code == 'ER_BAD_NULL_ERROR') {
+			await p.query('INSERT INTO user (id,count) VALUES (?,0);', [p.msg.author.id]);
+			await p.query(sql, params);
+		} else console.error(e);
 	}
 
 	// TODO neo4j

@@ -5,7 +5,7 @@
  * For more information, see README.md and LICENSE
  */
 
-const request = require('request');
+const request = require('../../../../utils/http.js');
 const levels = require('../../../../utils/levels.js');
 
 exports.display = async function (p, user, opt) {

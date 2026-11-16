@@ -1,7 +1,19 @@
 const redis = require('redis');
+const log = require('./log.js');
+
+// node_redis v2 reconnects on its own; the strategy only caps the backoff so a
+// dead Redis cannot spin the CPU or give up permanently.
+const retryStrategy = function (options) {
+	const delay = Math.min(options.attempt * 200, 5000);
+	log.warn(`redis: reconnecting in ${delay}ms (attempt ${options.attempt})`);
+	return delay;
+};
+
 const client = redis.createClient({
 	host: process.env.REDIS_HOST,
 	password: process.env.REDIS_PASS,
+	tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
+	retry_strategy: retryStrategy,
 });
 
 exports.incr = function (key, value = 1) {
@@ -176,3 +188,10 @@ client.on('error', function (err) {
 	console.error(err);
 });
 exports.client = client;
+
+exports.close = function () {
+	return new Promise((resolve) => {
+		if (!client.connected && !client.ready) return resolve();
+		client.quit(() => resolve());
+	});
+};

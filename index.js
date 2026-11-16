@@ -6,16 +6,27 @@
  */
 require('dotenv').config();
 if (!process.env.BOT_TOKEN) {
+	// eslint-disable-next-line no-console
 	console.error('Bot token not found in ~/.env file. Checking secret file instead...');
 	require('dotenv').config({ path: './secret/env' });
 	if (!process.env.BOT_TOKEN) {
+		// eslint-disable-next-line no-console
 		console.error('No bot token found. Please edit ./secret/env file and add your token');
+		process.exitCode = 1;
 		return;
 	}
 }
 
-// Config file
-const config = require('./src/data/config.json');
+// Config file (environment overrides applied inside the loader)
+const config = require('./src/utils/config.js');
+const log = require('./src/utils/log.js');
+const errors = require('./src/utils/errors.js');
+
+// Structured, redacted logging for the master process too
+log.configure({ debug: config.debug, identity: 'master' });
+log.installConsoleBridge();
+config.validate();
+errors.installProcessHandlers();
 
 // Grab tokens and secret files
 const debug = config.debug;
@@ -28,14 +39,35 @@ const Sharder = require('eris-sharder').Master;
 var result, shards, firstShardID, lastShardID;
 const cluster = require('cluster');
 
-let clusters = 60;
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 2000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchInitWithRetry() {
+	let lastError;
+	for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+		try {
+			return await request.fetchInit();
+		} catch (err) {
+			lastError = err;
+			log.warn(
+				`Could not reach the sharder server (attempt ${attempt}/${RETRY_ATTEMPTS}): ${
+					err?.message || err
+				}`
+			);
+			if (attempt < RETRY_ATTEMPTS) await sleep(RETRY_DELAY_MS * attempt);
+		}
+	}
+	throw lastError;
+}
 
 (async () => {
 	try {
 		//determine how many shards we will need for this manager
 		if (!debug && cluster.isMaster) {
-			result = await request.fetchInit();
-			console.log(result);
+			result = await fetchInitWithRetry();
+			log.info('Sharder server response:', result);
 			shards = parseInt(result['shards']);
 			firstShardID = parseInt(result['firstShardID']);
 			lastShardID = parseInt(result['lastShardID']);
@@ -44,10 +76,14 @@ let clusters = 60;
 			shards = 1;
 			firstShardID = 0;
 			lastShardID = 0;
-			clusters = 1;
+			config.clusters = 1;
 		}
 
-		console.log(
+		if (!Number.isInteger(firstShardID) || !Number.isInteger(lastShardID) || !shards) {
+			throw new Error('Sharder server returned an invalid shard configuration');
+		}
+
+		log.info(
 			'Creating shards ' + firstShardID + '~' + lastShardID + ' out of ' + shards + ' total shards!'
 		);
 
@@ -57,16 +93,20 @@ let clusters = 60;
 			clientOptions: config.eris.clientOptions,
 			debug: true,
 			shards,
-			clusters,
+			clusters: config.clusters,
 			firstShardID,
 			lastShardID,
 		});
 
 		if (cluster.isMaster) {
 			rateLimitUtil.init(sharder.bucket, debug);
+			errors.registerShutdownHook(async () => {
+				log.info('Master shutting down, letting clusters exit');
+			});
 		}
 	} catch (e) {
-		console.error('Failed to start eris sharder');
-		console.error(e);
+		log.error('Failed to start eris sharder');
+		log.error(e);
+		process.exitCode = 1;
 	}
 })();

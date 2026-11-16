@@ -6,7 +6,7 @@
  */
 const pluralize = require('pluralize');
 
-const config = require('../data/config.json');
+const config = require('./config.js');
 const rings = require('../data/rings.json');
 const global = require('./global.js');
 const itemUtil = require('../commands/commandList/shop/util/itemUtil.js');

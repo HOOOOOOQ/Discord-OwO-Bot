@@ -10,6 +10,13 @@ const CommandInterface = require('../../CommandInterface.js');
 const mathEmoji = '<a:naruhodo:593971680737624065>';
 
 const workerpool = require('workerpool');
+const log = require('../../../utils/log.js');
+const { classifyMathError } = require('../../../utils/mathResult.js');
+
+// Single source of truth for the evaluation budget. The pool is created once
+// per process and stays alive: terminating it after every request forced a new
+// worker spawn (and rejected in-flight work) on every subsequent invocation.
+const MATH_TIMEOUT_MS = Number.parseInt(process.env.MATH_TIMEOUT_MS, 10) || 3000;
 const pool = workerpool.pool(__dirname + '/mathWorker.js');
 
 module.exports = new CommandInterface({
@@ -36,7 +43,7 @@ module.exports = new CommandInterface({
 		let expression = p.args.join(' ').replace(/\.(?=[a-zA-Z_]+\()/gm, '\\.');
 		pool
 			.exec('compute', [expression])
-			.timeout(3000)
+			.timeout(MATH_TIMEOUT_MS)
 			.then(function (result) {
 				if (result.mathjs) {
 					if (result.data) result = JSON.stringify(result.data);
@@ -57,12 +64,18 @@ module.exports = new CommandInterface({
 				else p.replyMsg(mathEmoji, p.replaceMentions(', the answer is: **' + result + '**'));
 			})
 			.catch(function (err) {
-				if (err.message == 'Promise timed out after 1000 ms')
-					p.errorMsg(', that expression is too difficult for me... :c', 3000);
-				else p.errorMsg("... I don't think that's an expression silly head", 3000);
-			})
-			.then(function () {
-				pool.terminate();
+				if (classifyMathError(err) === 'timeout') {
+					log.debug(`math: evaluation timeout after ${MATH_TIMEOUT_MS}ms`);
+					p.errorMsg(
+						`, that expression is too difficult for me... :c (limit ${MATH_TIMEOUT_MS}ms)`,
+						3000
+					);
+				} else {
+					p.errorMsg("... I don't think that's an expression silly head", 3000);
+				}
 			});
 	},
 });
+
+// Exposed for tests and for graceful shutdown of the worker process
+module.exports.pool = pool;

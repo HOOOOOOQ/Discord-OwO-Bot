@@ -5,7 +5,7 @@
  * For more information, see README.md and LICENSE
  */
 
-const request = require('request').defaults({ encoding: null });
+const request = require('./http.js').defaults({ encoding: null });
 
 exports.urlToBufferString = function (url) {
 	return new Promise(function (res, rej) {

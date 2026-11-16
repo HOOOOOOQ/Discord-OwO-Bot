@@ -9,7 +9,7 @@
  * Global Variables and Methods
  */
 const numbers = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
-const request = require('request');
+const request = require('./http.js');
 const filter = new (require('bad-words'))({
 	placeHolder: 'OwO',
 	replaceRegex: /\w+/g,

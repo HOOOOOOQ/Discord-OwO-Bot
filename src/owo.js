@@ -8,6 +8,15 @@
 const Base = require('eris-sharder').Base;
 const EventHandler = require('./eventHandlers/EventHandler.js');
 
+const log = require('./utils/log.js');
+const config = require('./utils/config.js');
+const errors = require('./utils/errors.js');
+const metrics = require('./utils/metrics.js');
+
+// All log output (including legacy console.* call sites) is structured and redacted
+log.configure({ debug: config.debug });
+log.installConsoleBridge();
+
 // Discordbots.org api
 const DBL = require('dblapi.js');
 const dbl = new DBL(process.env.DBL_TOKEN);
@@ -16,6 +25,18 @@ class OwO extends Base {
 	constructor(bot) {
 		super(bot);
 		this.dbl = dbl;
+
+		// Identify this process in every log line
+		try {
+			log.setIdentity(`cluster:${this.clusterID}`);
+		} catch (err) {
+			log.setIdentity('cluster:?');
+		}
+
+		// Process level safety net + graceful shutdown
+		errors.installProcessHandlers();
+		metrics.init({ enabled: config.metricsEnabled });
+		config.validate();
 
 		// Mysql connection
 		this.mysql = require('./utils/mysql.js');
@@ -42,8 +63,8 @@ class OwO extends Base {
 		// Logger
 		this.logger = require('./utils/logger.js');
 
-		// Bot config file
-		this.config = require('./data/config.json');
+		// Bot config file (env overrides applied by the loader)
+		this.config = config;
 		this.debug = this.config.debug;
 		this.prefix = this.config.prefix;
 		this.optOut = {};
@@ -87,9 +108,9 @@ class OwO extends Base {
 		try {
 			this.macro = require('./../../tokens/macro.js');
 		} catch (err) {
-			console.error('Could not find macro.js, attempting to use ./secret file...');
+			log.warn('Could not find tokens/macro.js, attempting to use ./secret file...');
 			this.macro = require('../secret/macro.js');
-			console.log('Found macro.js file in secret folder!');
+			log.info('Found macro.js file in secret folder!');
 		}
 		this.macro.bind(this, require('merge-images'), require('canvas'));
 		this.cooldown.setMacro(this.macro);
@@ -118,9 +139,9 @@ class OwO extends Base {
 		try {
 			this.badwords = require('./../../tokens/badwords.json');
 		} catch (err) {
-			console.error('Could not find badwords.json, attempting to use ./secret file...');
+			log.warn('Could not find tokens/badwords.json, attempting to use ./secret file...');
 			this.badwords = require('../secret/badwords.json');
-			console.log('Found badwords.json file in secret folder!');
+			log.info('Found badwords.json file in secret folder!');
 		}
 
 		this.giveaway = require('./utils/giveaway.js');
@@ -137,7 +158,32 @@ class OwO extends Base {
 		// sends info to our main server every X seconds
 		this.InfoUpdater = new (require('./utils/InfoUpdater.js'))(this);
 
+		// Close external resources before the process exits
+		errors.registerShutdownHook(async () => {
+			await this.closeResources();
+		});
+
 		this.logger.logstashQos('launch');
+	}
+
+	async closeResources() {
+		try {
+			await this.mysql.con.end();
+		} catch (err) {
+			log.warn('mysql pool shutdown failed:', err.message);
+		}
+		try {
+			if (this.redis?.client?.quit) await this.redis.client.quit();
+		} catch (err) {
+			log.warn('redis shutdown failed:', err.message);
+		}
+		try {
+			for (const socket of [this.streamSocket, this.snailSocket]) {
+				if (socket?.close) socket.close();
+			}
+		} catch (err) {
+			log.warn('socket shutdown failed:', err.message);
+		}
 	}
 
 	async setOptOut() {

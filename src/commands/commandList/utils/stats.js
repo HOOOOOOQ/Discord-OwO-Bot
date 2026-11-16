@@ -6,7 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
-const request = require('request');
+const request = require('../../../utils/http.js');
 
 module.exports = new CommandInterface({
 	alias: ['stats', 'stat', 'info'],

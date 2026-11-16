@@ -3,7 +3,6 @@
 		"path": "/src/owo.js",
 		"name": "OwO Bot"
 	},
-
 	"eris": {
 		"clientOptions": {
 			"autoreconnect": true,
@@ -29,7 +28,6 @@
 			}
 		}
 	},
-
 	"prefix": "owo",
 	"embed_color": 8240363,
 	"success_color": 65280,
@@ -76,16 +74,11 @@
 		"question": "<:question:416100711412137984>"
 	},
 	"role": {
-		"admin": ["420112323278143489"],
-		"manager": ["959380828838850590"],
-		"helper": ["729574996556382298"]
+		"admin": [],
+		"manager": [],
+		"helper": []
 	},
-	"modChannels": [
-		"471579186059018241",
-		"596220958730223619",
-		"645501936036216862",
-		"759637235237650440"
-	],
+	"modChannels": [],
 	"giveawayChannels": [
 		"1099453684691243098",
 		"1099453847899996170",
@@ -95,9 +88,14 @@
 		"1168797827464429618",
 		"1168797748343099444"
 	],
-	"owner": "184587051943985152",
+	"owner": "",
 	"guildlink": "https://discord.com/invite/owobot",
 	"invitelink": "https://discordapp.com/oauth2/authorize?client_id=408785106942164992&permissions=1074120776&scope=bot",
 	"blacklist": {},
-	"debug": true
+	"debug": false,
+	"owners": [],
+	"evalEnabled": false,
+	"metricsEnabled": false,
+	"clusters": 60,
+	"debugWhitelist": []
 }

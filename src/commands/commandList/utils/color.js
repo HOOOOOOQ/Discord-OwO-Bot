@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const request = require('request');
+const request = require('../../../utils/http.js');
 const maxInt = 16777215;
 const Vibrant = require('node-vibrant');
 const colorEmoji = '🎨';

@@ -8,7 +8,7 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const commandGroups = require('../../../utils/commandGroups.js');
-const request = require('request');
+const request = require('../../../utils/http.js');
 const rocketEmoji = '🚀';
 
 module.exports = new CommandInterface({

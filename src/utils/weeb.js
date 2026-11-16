@@ -5,8 +5,60 @@
  * For more information, see README.md and LICENSE
  */
 
-const weeb = require('weeb.js');
-const sh = new weeb('Wolke ' + process.env.WEEBSH_TOKEN, 'owo/1.0');
+/**
+ * weeb.sh client.
+ *
+ * The `weeb.js` package (which pulled in the deprecated `request` library, and
+ * with it a critical SSRF advisory) is replaced by two direct API calls that
+ * keep the same public surface: grab() and getTypes().
+ */
+
+const request = require('./http.js');
+const log = require('./log.js');
+
+const BASE_URL = process.env.WEEBSH_URL || 'https://api.weeb.sh';
+const TIMEOUT_MS = Number.parseInt(process.env.WEEBSH_TIMEOUT_MS, 10) || 10000;
+
+function authHeaders() {
+	return {
+		Authorization: 'Wolke ' + (process.env.WEEBSH_TOKEN || ''),
+		'User-Agent': 'owo/1.0',
+	};
+}
+
+function fetchRandom(type, nsfw, filetype) {
+	return new Promise((resolve, reject) => {
+		const query = new URLSearchParams({ type, filetype });
+		if (nsfw) query.append('nsfw', nsfw);
+		request.get(
+			`${BASE_URL}/images/random?${query.toString()}`,
+			{ headers: authHeaders(), json: true, timeout: TIMEOUT_MS },
+			(err, response, body) => {
+				if (err) return reject(err);
+				if (!response || response.statusCode !== 200 || !body?.url) {
+					return reject(new Error(`weeb.sh responded with HTTP ${response?.statusCode}`));
+				}
+				resolve(body);
+			}
+		);
+	});
+}
+
+function fetchTypes() {
+	return new Promise((resolve, reject) => {
+		request.get(
+			`${BASE_URL}/images/types`,
+			{ headers: authHeaders(), json: true, timeout: TIMEOUT_MS },
+			(err, response, body) => {
+				if (err) return reject(err);
+				if (!response || response.statusCode !== 200) {
+					return reject(new Error(`weeb.sh responded with HTTP ${response?.statusCode}`));
+				}
+				resolve(Array.isArray(body?.types) ? body.types : []);
+			}
+		);
+	});
+}
 
 /**
  * Gets an image from weeb.sh
@@ -18,7 +70,8 @@ exports.grab = function (p, ptype, ftype, text, notsfw, retry) {
 	let retryt = true;
 	if (typeof notsfw == 'boolean' && notsfw) nsfwt = 'only';
 	if (retryt && typeof retry == 'boolean') retryt = retry;
-	sh.getRandom({ type: ptype, nsfw: nsfwt, filetype: ftype })
+
+	fetchRandom(ptype, nsfwt, ftype)
 		.then((array) => {
 			if (!array) {
 				return;
@@ -37,9 +90,10 @@ exports.grab = function (p, ptype, ftype, text, notsfw, retry) {
 
 			p.send({ embed });
 		})
-		.catch(() => {
+		.catch((err) => {
+			log.debug(`weeb.sh lookup failed for type=${ptype}: ${err.message}`);
 			if (retryt && (ftype == 'jpg' || ftype == 'png')) {
-				this.grab(p, ptype, ftype == 'jpg' ? 'png' : 'jpg', text, notsfw, false);
+				exports.grab(p, ptype, ftype == 'jpg' ? 'png' : 'jpg', text, notsfw, false);
 			} else
 				p.errorMsg(
 					", I couldn't find that image type! :c\nType `owo help gif` for the list of types!",
@@ -52,11 +106,16 @@ exports.grab = function (p, ptype, ftype, text, notsfw, retry) {
  * Lists all weeb.sh types
  */
 exports.getTypes = function (p) {
-	sh.getTypes().then((array) => {
-		var txt = 'Available Image Types:\n';
-		for (var i = 0; i < array.length; i++) txt += '`' + array[i] + '`, ';
-		txt += '`nsfw`';
-		txt += '\n*Some types will not work on pic*';
-		p.send(txt);
-	});
+	fetchTypes()
+		.then((array) => {
+			var txt = 'Available Image Types:\n';
+			for (var i = 0; i < array.length; i++) txt += '`' + array[i] + '`, ';
+			txt += '`nsfw`';
+			txt += '\n*Some types will not work on pic*';
+			p.send(txt);
+		})
+		.catch((err) => {
+			log.warn('weeb.sh types lookup failed:', err.message);
+			p.errorMsg(", I couldn't reach the image service right now. :c", 3000);
+		});
 };

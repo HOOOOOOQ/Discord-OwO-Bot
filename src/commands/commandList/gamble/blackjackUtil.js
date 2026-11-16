@@ -116,7 +116,7 @@ const cardsf = [
 	'<a:kdf:467565463891607573>',
 ];
 const global = require('../../../utils/global.js');
-const config = require('../../../data/config.json');
+const config = require('../../../utils/config.js');
 const random = require('random-number-csprng');
 //back = b, flip = f, card = c
 

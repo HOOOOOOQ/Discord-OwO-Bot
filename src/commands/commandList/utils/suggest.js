@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 const ban = require('../../../utils/ban.js');
-const config = require('../../../data/config.json');
+const config = require('../../../utils/config.js');
 
 const feedbackChannel = '519778148888346635';
 const supportGuild = '420104212895105044';

@@ -1,5 +1,5 @@
 const mysql = require('../botHandlers/mysqlHandler.js');
-const request = require('request');
+const request = require('./http.js');
 const levels = require('./levels.js');
 const global = require('./global.js');
 const DataResolver = require('./dataResolver.js');

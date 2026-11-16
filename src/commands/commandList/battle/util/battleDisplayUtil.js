@@ -4,7 +4,7 @@
  * This software is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
  * For more information, see README.md and LICENSE
  */
-const request = require('request');
+const request = require('../../../../utils/http.js');
 const alterBattle = require('../../patreon/alterBattle.js');
 const battleImageUtil = require('../battleImage.js');
 const battleUtil = require('./battleUtil.js');

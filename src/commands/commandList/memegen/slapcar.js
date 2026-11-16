@@ -8,7 +8,7 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const fs = require('fs');
-const request = require('request');
+const request = require('../../../utils/http.js');
 const { createCanvas, Image } = require('canvas');
 const textBoxHeight = 100;
 

@@ -6,7 +6,44 @@ Here are the codes for OwO Bot! Feel free to submit an issue or open a pull requ
 
 ## Self hosting
 
-This discord bot uses [MariaDB](https://mariadb.org/) and [Redis](https://redis.io/) for its databases. Some files may be missing due to security reasons and can be found [here](https://github.com/ChristopherBThai/Discord-OwO-Bot/tree/master/secret).
+Requirements: **Node.js ≥ 20**, **MariaDB/MySQL**, **Redis**, and a native
+toolchain (`build-essential python3 libcairo2-dev libpango1.0-dev libjpeg-dev
+libgif-dev librsvg2-dev`) for the `canvas` dependency.
+
+```bash
+cp .env.example .env      # add your BOT_TOKEN, OWNER_IDS, MySQL/Redis settings
+npm ci
+npm run verify:commands   # loads every command module
+node index.js
+```
+
+There is **no default owner**: set `OWNER_IDS` to your Discord user id, otherwise
+all owner-only commands (including `eval`) stay disabled. `DEBUG` defaults to
+`false`.
+
+Docker (bot + MariaDB + Redis) is available but optional:
+
+```bash
+cp .env.example .env && docker compose up -d --build
+```
+
+Full instructions: [DEPLOYMENT.md](DEPLOYMENT.md). Security posture and residual
+risks: [SECURITY.md](SECURITY.md). Tests: [TESTING.md](TESTING.md). Repair log
+with root causes and verification: [FIXLOG.md](FIXLOG.md). Architecture and
+remaining technical debt: [ANALISIS.md](ANALISIS.md).
+
+The bot uses [MariaDB](https://mariadb.org/) and [Redis](https://redis.io/) for
+its databases. Some files may be missing due to security reasons and can be
+found [here](https://github.com/ChristopherBThai/Discord-OwO-Bot/tree/master/secret).
+
+## Testing
+
+```bash
+npm test                  # unit + regression suite (node:test)
+npm run lint              # ESLint
+npm run prettier          # Prettier check
+npm run audit             # production dependency audit
+```
 
 ## License
 

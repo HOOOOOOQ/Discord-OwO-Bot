@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const gtranslate = require('translate-google');
+const gtranslate = require('../../../utils/translate.js');
 
 module.exports = new CommandInterface({
 	alias: ['translate', 'listlang', 'tl'],

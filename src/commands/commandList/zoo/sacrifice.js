@@ -111,10 +111,11 @@ module.exports = new CommandInterface({
 });
 
 async function sellAnimal(p, msg, con, animal, count, send, global) {
-	let sql = `SELECT * FROM autohunt WHERE id = ${msg.author.id};`;
-	let result = await p.query(sql);
-	if (!result[0])
-		await p.query(`INSERT IGNORE INTO autohunt (id,essence) VALUES (${msg.author.id},0);`);
+	let sql = 'SELECT * FROM autohunt WHERE id = ?;';
+	let result = await p.query(sql, [msg.author.id]);
+	if (!result[0]) {
+		await p.query('INSERT IGNORE INTO autohunt (id,essence) VALUES (?,0);', [msg.author.id]);
+	}
 
 	if (count != 'all' && count <= 0) {
 		send('**🚫 |** You need to sacrifice more than 1 silly~', 3000);

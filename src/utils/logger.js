@@ -4,24 +4,35 @@
  * This software is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
  * For more information, see README.md and LICENSE
  */
-const config = require('../data/config.json');
+const config = require('./config.js');
 const global = require('./global.js');
+const log = require('./log.js');
+const metrics = require('./metrics.js');
 
 /***** Datadog *****/
 var StatsD = require('node-dogstatsd').StatsD;
-var log = new StatsD();
+var statsdClient = null;
+try {
+	statsdClient = new StatsD();
+} catch (err) {
+	log.warn('logger: StatsD client unavailable:', err.message);
+}
 
 exports.increment = function (name, tags) {
-	log.increment('owo.' + name, tags);
+	metrics.increment('owo.' + name, 1, tags || {});
+	if (!statsdClient) return;
+	statsdClient.increment('owo.' + name, tags);
 };
 
 exports.decrement = function (name, tags) {
-	log.decrement('owo.' + name, tags);
+	metrics.decrement('owo.' + name, 1, tags || {});
+	if (!statsdClient) return;
+	statsdClient.decrement('owo.' + name, tags);
 };
 
 exports.value = function (name, amount, tags) {
-	if (amount > 0) log.incrementBy('owo.' + name, amount, tags);
-	else if (amount < 0) log.decrementBy('owo.' + name, Math.abs(amount), tags);
+	if (amount > 0) exports.increment(name, tags);
+	else if (amount < 0) exports.decrement(name, tags);
 };
 
 /***** winston *****/
@@ -53,7 +64,6 @@ const sdc = new SDC({
 });
 
 const incr = (exports.incr = function (name, amount = 1, tags = {}, msg) {
-	return;
 	/* eslint-disable-next-line */
 	if (amount < 0) {
 		decr(name, amount, tags, msg);
@@ -64,11 +74,19 @@ const incr = (exports.incr = function (name, amount = 1, tags = {}, msg) {
 		tags.channel = msg.channel.id;
 		tags.guild = msg.channel.type == 1 ? 'dm' : msg.channel.guild.id;
 	}
-	sdc.increment(`${name}`, amount, tags);
+	metrics.increment(`${name}`, amount, tags);
+	try {
+		sdc.increment(`${name}`, amount, tags);
+	} catch (err) {
+		log.debug('logger: statsd increment failed:', err.message);
+	}
 });
 
 const decr = (exports.decr = function (name, amount = -1, tags = {}, msg) {
-	return;
+	if (amount > 0) {
+		incr(name, amount, tags, msg);
+		return;
+	}
 	/* eslint-disable-next-line */
 	if (amount > 0) {
 		incr(name, amount, tags, msg);
@@ -79,10 +97,15 @@ const decr = (exports.decr = function (name, amount = -1, tags = {}, msg) {
 		tags.channel = msg.channel.id;
 		tags.guild = msg.channel.type == 1 ? 'dm' : msg.channel.guild.id;
 	}
-	sdc.decrement(`${name}`, amount, tags);
+	metrics.decrement(`${name}`, -amount, tags);
+	try {
+		sdc.decrement(`${name}`, amount, tags);
+	} catch (err) {
+		log.debug('logger: statsd decrement failed:', err.message);
+	}
 });
 
-const request = require('request');
+const request = require('./http.js');
 // Only display this error once per 5 minutes
 let influxErrorShown = false;
 setTimeout(() => {
@@ -104,9 +127,8 @@ exports.command = function (command, msg) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);
@@ -118,7 +140,7 @@ exports.logstash = function (command, p) {
 		user: p.msg.author.id,
 		command: command,
 		text: p.msg.content,
-		guild: p.msg.channel.guild?.id | 'dm',
+		guild: p.msg.channel.guild?.id || 'dm',
 	};
 
 	request(
@@ -130,9 +152,8 @@ exports.logstash = function (command, p) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);
@@ -144,7 +165,7 @@ exports.logstashBanned = function (command, p) {
 		user: p.msg.author.id,
 		bannedCommand: command,
 		text: p.msg.content,
-		guild: p.msg.channel.guild.id,
+		guild: p.msg.channel.guild?.id || 'dm',
 	};
 
 	request(
@@ -156,9 +177,8 @@ exports.logstashBanned = function (command, p) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);
@@ -176,9 +196,8 @@ exports.logstashCaptcha = function (metric) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);
@@ -203,9 +222,8 @@ exports.logstashQos = function (metricKey, metric = {}) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);

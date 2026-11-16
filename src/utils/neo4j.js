@@ -1,4 +1,4 @@
-const request = require('request');
+const request = require('./http.js');
 const global = require('./global');
 const disabled = true;
 

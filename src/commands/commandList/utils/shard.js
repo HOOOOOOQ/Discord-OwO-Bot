@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const request = require('request');
+const request = require('../../../utils/http.js');
 const maxDiff = 30000;
 const perPage = 20;
 const nextPageEmoji = '➡️';

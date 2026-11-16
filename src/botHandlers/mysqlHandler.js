@@ -5,72 +5,128 @@
  * For more information, see README.md and LICENSE
  */
 
+const log = require('../utils/log.js');
+
 let con = require('../utils/mysql.js').con;
-const acquireTimeLimit = 10000;
+const acquireTimeLimit = Number.parseInt(process.env.MYSQL_TRANSACTION_TIMEOUT_MS, 10) || 10000;
+const queryTimeout = Number.parseInt(process.env.MYSQL_QUERY_TIMEOUT_MS, 10) || 30000;
+
+/** Allows tests to inject a fake pool without touching the real connection. */
+exports.setConnection = function (connection) {
+	con = connection;
+};
 
 /* Converts mysql queries to Promises */
 exports.query = function (sql, variables = []) {
 	return new Promise((resolve, reject) => {
-		con.query(sql, variables, function (err, rows) {
+		con.query({ sql, timeout: queryTimeout }, variables, function (err, rows) {
 			if (err) return reject(err);
 			resolve(rows);
 		});
 	});
 };
 
-exports.startTransaction = () => {
-	return new Promise((res, rej) => {
-		con.getConnection((err, acon) => {
-			if (err) return rej(err);
-			acon.beginTransaction((err) => {
-				if (err) throw err;
+/**
+ * Builds the transaction handle for an already-acquired connection.
+ *
+ * Every terminal operation (commit / rollback) is idempotent, releases the
+ * connection exactly once, and never throws from inside a driver callback.
+ * Exported so the lifecycle can be unit tested against a fake connection.
+ */
+exports.buildTransaction = function (acon, options = {}) {
+	const timeLimit = options.timeLimit || acquireTimeLimit;
+	const onWarn = options.onWarn || ((message) => log.error(message));
+	let settled = false;
+	let releaseTimer = null;
+
+	const release = () => {
+		try {
+			acon.release();
+		} catch (err) {
+			onWarn(`[${acon.threadId}] Failed to release mysql connection: ${err.message}`);
+		}
+	};
+
+	const clearTimer = () => {
+		if (releaseTimer) {
+			clearTimeout(releaseTimer);
+			releaseTimer = null;
+		}
+	};
+
+	const rollback = function (reason) {
+		if (settled) return Promise.resolve(false);
+		settled = true;
+		clearTimer();
+		if (reason) onWarn(`[${acon.threadId}] Transaction rolled back: ${reason}`);
+		return new Promise((resolve) => {
+			acon.rollback(() => {
+				release();
+				resolve(false);
 			});
+		});
+	};
 
-			const result = {
-				commit: () => {
-					delete result.commit;
-					delete result.rollback;
-					delete result.query;
-					clearTimeout(releaseTimer);
-					return new Promise((res, rej) => {
-						acon.commit((err) => {
-							if (err)
-								return acon.rollback(() => {
-									rej(err);
-								});
-							acon.release();
-							res();
-						});
+	const commit = function () {
+		if (settled) return Promise.resolve(false);
+		settled = true;
+		clearTimer();
+		return new Promise((resolve, reject) => {
+			acon.commit((err) => {
+				if (err) {
+					acon.rollback(() => {
+						release();
+						reject(err);
 					});
-				},
-				rollback: () => {
-					delete result.commit;
-					delete result.rollback;
-					delete result.query;
-					clearTimeout(releaseTimer);
-					return new Promise((res) => {
-						acon.rollback(() => {
-							acon.release();
-							res();
-						});
-					});
-				},
-				query: (sql, variables = []) => {
-					return new Promise((res2, rej2) => {
-						acon.query(sql, variables, (err, rows) => {
-							if (err) return rej2(err);
-							res2(rows);
-						});
-					});
-				},
-			};
+					return;
+				}
+				release();
+				resolve(true);
+			});
+		});
+	};
 
-			let releaseTimer = setTimeout(() => {
-				console.error(`[${acon.threadId}] Mysql connection was not released!`);
-				result.rollback();
-			}, acquireTimeLimit);
+	const transaction = {
+		commit,
+		rollback,
+		query: (sql, variables = []) =>
+			new Promise((resolve, reject) => {
+				if (settled) {
+					reject(new Error('Transaction is already closed'));
+					return;
+				}
+				acon.query({ sql, timeout: queryTimeout }, variables, (err, rows) => {
+					if (err) return reject(err);
+					resolve(rows);
+				});
+			}),
+	};
 
-			res(result);
+	releaseTimer = setTimeout(() => {
+		onWarn(`[${acon.threadId}] Mysql connection was not released!`);
+		rollback('lease timeout');
+	}, timeLimit);
+	// Do not keep the process alive just for the lease watchdog
+	releaseTimer.unref?.();
+
+	return transaction;
+};
+
+exports.startTransaction = function () {
+	return new Promise((resolve, reject) => {
+		con.getConnection((err, acon) => {
+			if (err) return reject(err);
+			acon.beginTransaction((beginErr) => {
+				if (beginErr) {
+					try {
+						acon.release();
+					} catch (releaseError) {
+						log.error('Failed to release connection after failed transaction start');
+					}
+					return reject(beginErr);
+				}
+				resolve(exports.buildTransaction(acon));
+			});
 		});
 	});
 };

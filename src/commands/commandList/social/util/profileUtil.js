@@ -5,7 +5,7 @@
  * For more information, see README.md and LICENSE
  */
 
-const request = require('request');
+const request = require('../../../../utils/http.js');
 const rings = require('../../../../data/rings.json');
 const levels = require('../../../../utils/levels.js');
 const animalUtil = require('../../battle/util/animalUtil.js');
@@ -110,7 +110,7 @@ async function getRank(p, user) {
 }
 
 async function getCookie(p, user) {
-	let result = await p.query(`SELECT count FROM rep WHERE id = ${user.id};`);
+	let result = await p.query('SELECT count FROM rep WHERE id = ?;', [user.id]);
 	if (!result || !result[0]) return { img: 'cookie.png', text: '+0' };
 
 	let count = result[0].count;

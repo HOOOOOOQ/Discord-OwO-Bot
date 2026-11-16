@@ -1,0 +1,53 @@
+# Local / small-deployment stack: bot + MariaDB + Redis.
+# Copy .env.example to .env and fill it in before running.
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_HOST: mariadb
+      REDIS_HOST: redis
+      NODE_ENV: production
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # The sharder forks ~60 clusters; give it a fighting chance to shut down
+    stop_grace_period: 30s
+
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      MARIADB_DATABASE: ${MYSQL_DATABASE:-owo}
+      MARIADB_USER: ${MYSQL_USER:-owo}
+      MARIADB_PASSWORD: ${MYSQL_PASS:-change-me}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./secret/CREATE-OWO-TABLES.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./secret/OWO-TABLE-DATA.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  mariadb-data:
+  redis-data:

@@ -4,7 +4,8 @@
  * This software is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
  * For more information, see README.md and LICENSE
  */
-const request = require('request');
+const request = require('../src/utils/http.js');
+const log = require('../src/utils/log.js');
 
 let influxErrorShown = false;
 
@@ -39,9 +40,8 @@ async function logBucket(bucket, debug) {
 		},
 		function (err) {
 			if (err && !influxErrorShown) {
-				console.error('InfluxDB is inactive. Log upload will not work.');
+				log.warn('InfluxDB is inactive. Log upload will not work.');
 				influxErrorShown = true;
-				throw err;
 			}
 		}
 	);
