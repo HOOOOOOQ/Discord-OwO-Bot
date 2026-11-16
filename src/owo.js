@@ -112,7 +112,13 @@ class OwO extends Base {
 			this.macro = require('../secret/macro.js');
 			log.info('Found macro.js file in secret folder!');
 		}
-		this.macro.bind(this, require('merge-images'), require('canvas'));
+		// canvas is optional (native build); keep the macro bootstrap working on
+		// hosts without it instead of crashing the cluster at startup.
+		this.macro.bind(
+			this,
+			require('./utils/mergeImages.js'),
+			require('./utils/nativeCanvas.js').load()
+		);
 		this.cooldown.setMacro(this.macro);
 
 		// Allows me to check catch before any fetch requests (reduces api calls)

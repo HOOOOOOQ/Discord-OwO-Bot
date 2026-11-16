@@ -145,7 +145,7 @@ Sisa 22 advisory beserta alasan tidak di-upgrade ada di `SECURITY.md`.
 2. **`ALLOW_EVAL`** memberi RCE ke pemegangnya. Biarkan `false` di produksi.
 3. **60 cluster per host** = 60 proses + pool DB masing-masing; sesuaikan
    `CLUSTERS`/`MYSQL_CONNECTION_LIMIT`.
-4. **`canvas`** satu-satunya dependency native; tanpa toolchain, `npm ci` gagal
+4. **`canvas`** satu-satunya dependency native; sudah dibuat `optionalDependencies`, jadi tanpa toolchain `npm ci` tetap sukses dan hanya command memegen yang nonaktif
    (disediakan Dockerfile dan job CI khusus).
 5. **Layanan internal** (`SHARDER_HOST`, image-gen) wajib untuk produksi; tanpa
    itu `index.js` berhenti dengan pesan jelas (bukan crash acak).

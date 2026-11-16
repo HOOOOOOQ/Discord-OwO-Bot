@@ -19,14 +19,12 @@
 		"@zuzak/owo": "^1.9.0",
 		"axios": "^1.21.1",
 		"bad-words": "^3.0.3",
-		"canvas": "^2.11.2",
 		"dblapi.js": "^2.4.0",
 		"dd-trace": "^0.31.4",
 		"dotenv": "^10.0.0",
 		"eris-sharder": "https://github.com/ChristopherBThai/eris-sharder.git#b82220e130c298fe40d6c41b133151288b149711",
 		"eventemitter3": "^4.0.4",
 		"mathjs": "^6.6.5",
-		"merge-images": "https://github.com/ChristopherBThai/merge-images.git#430c3ab6df264e8660c4c9b35ef22772774d0bab",
 		"mysql": "^2.18.1",
 		"namor": "^2.0.2",
 		"node-dogstatsd": "0.0.7",
@@ -42,6 +40,9 @@
 		"statsd-client": "^0.4.5",
 		"systeminformation": "^5.33.23",
 		"workerpool": "^6.1.4"
+	},
+	"optionalDependencies": {
+		"canvas": "^2.11.2"
 	},
 	"repository": {
 		"type": "git",

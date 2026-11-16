@@ -7,7 +7,7 @@
 | Node.js           | ≥ 20 (tested on 22)                                                                     | `engines.node` in `package.json`                     |
 | MariaDB / MySQL   | 10.6+ / 8.0+                                                                            | schema in `secret/CREATE-OWO-TABLES.sql` (87 tables) |
 | Redis             | 6+                                                                                      | cooldowns, XP, prefixes, pub/sub                     |
-| Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | only for `canvas`                                    |
+| Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | optional: hanya untuk `canvas` (memegen)             |
 | Internal services | `SHARDER_HOST`, image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh  | required by the sharder and image commands           |
 
 ## 1. Configuration
@@ -78,7 +78,7 @@ existing deployment.
 ## 3. Install and run
 
 ```bash
-npm ci            # needs the native toolchain above for canvas
+npm ci            # canvas is optional: without the toolchain it is skipped and memegen is disabled
 npm run verify:commands
 node index.js
 ```

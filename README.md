@@ -16,9 +16,11 @@ bot owners plus any users/roles listed in `COWONCY_ADMIN_IDS` /
 
 ## Self hosting
 
-Requirements: **Node.js ≥ 20**, **MariaDB/MySQL**, **Redis**, and a native
-toolchain (`build-essential python3 libcairo2-dev libpango1.0-dev libjpeg-dev
-libgif-dev librsvg2-dev`) for the `canvas` dependency.
+Requirements: **Node.js ≥ 20**, **MariaDB/MySQL**, **Redis**, and — only if you
+want the image/meme commands — a native toolchain (`build-essential python3
+libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev`) for the
+`canvas` dependency. `canvas` is optional: without it the bot still installs and
+runs, and only the memegen commands are disabled.
 
 ```bash
 cp .env.example .env      # minimal: BOT_TOKEN, OWNER_IDS, DATABASE_URL, REDIS_URL

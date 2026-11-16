@@ -7,8 +7,23 @@
 
 const fs = require('fs');
 const request = require('../../../utils/http.js').defaults({ encoding: null });
-const { createCanvas, Image } = require('canvas');
+const nativeCanvas = require('../../../utils/nativeCanvas.js');
+
 const font = 'Impact';
+
+function canvasModules() {
+	const lib = nativeCanvas.load();
+	if (!lib) throw new Error('canvas module is not available');
+	return lib;
+}
+// Constructor-compatible helpers: the call sites below use `new Image()` /
+// `createCanvas(w, h)` unchanged.
+function Image() {
+	return new (canvasModules().Image)();
+}
+function createCanvas(width, height) {
+	return canvasModules().createCanvas(width, height);
+}
 
 exports.loadBackground = async function (file, callback) {
 	fs.readFile(file, function (err, image) {
@@ -17,15 +32,20 @@ exports.loadBackground = async function (file, callback) {
 			callback(true);
 			return;
 		}
-		let img = new Image();
-		img.src = image;
-		let canvas = new createCanvas(img.width, img.height);
-		canvas.backgroundColor = 'white';
-		let ctx = canvas.getContext('2d');
-		ctx.textAlign = 'left';
-		ctx.textBaseline = 'middle';
-		ctx.drawImage(img, 0, 0, img.width, img.height);
-		callback(false, ctx, canvas, img);
+		try {
+			let img = new Image();
+			img.src = image;
+			let canvas = new createCanvas(img.width, img.height);
+			canvas.backgroundColor = 'white';
+			let ctx = canvas.getContext('2d');
+			ctx.textAlign = 'left';
+			ctx.textBaseline = 'middle';
+			ctx.drawImage(img, 0, 0, img.width, img.height);
+			callback(false, ctx, canvas, img);
+		} catch (canvasError) {
+			// canvas is an optional dependency; report it through the existing path
+			callback(true);
+		}
 	});
 };
 exports.addText = async function (args, p, ctx, canvas, callback) {
