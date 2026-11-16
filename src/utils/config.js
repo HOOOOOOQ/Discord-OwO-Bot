@@ -109,6 +109,17 @@ config.giveawayChannels = envIds(
 	parseIdList('GIVEAWAY_CHANNEL_IDS', defaults.giveawayChannels || [])
 );
 
+// Users/roles allowed to create cowoncy (`grant` command). Empty lists keep the
+// command owner-only, so a fork never inherits another instance's allowlist.
+config.cowoncyAdmins = envIds(
+	['COWONCY_ADMIN_IDS'],
+	parseIdList('COWONCY_ADMIN_IDS', defaults.cowoncyAdmins || [])
+);
+config.cowoncyAdminRoles = envIds(
+	['COWONCY_ADMIN_ROLE_IDS'],
+	parseIdList('COWONCY_ADMIN_ROLE_IDS', defaults.cowoncyAdminRoles || [])
+);
+
 // ---- Runtime flags --------------------------------------------------------
 config.debug = parseBool(process.env.DEBUG, defaults.debug === true);
 // Owner-only dynamic evaluation. Off unless explicitly enabled.
@@ -127,6 +138,14 @@ config.debugWhitelist = parseIdList(
 config.metricsEnabled = parseBool(process.env.METRICS_ENABLED, defaults.metricsEnabled === true);
 config.exitOnFatal = parseBool(process.env.EXIT_ON_FATAL, true);
 
+// Largest amount a single `grant` may create (default 1,000,000,000).
+config.cowoncyGrantMax =
+	Number.parseInt(process.env.COWONCY_GRANT_MAX, 10) || defaults.cowoncyGrantMax || 1000000000;
+if (!Number.isSafeInteger(config.cowoncyGrantMax) || config.cowoncyGrantMax < 1) {
+	log.warn('config: invalid COWONCY_GRANT_MAX value, falling back to 1000000000');
+	config.cowoncyGrantMax = 1000000000;
+}
+
 config.config = config;
 
 config.validate = function () {
@@ -138,6 +157,9 @@ config.validate = function () {
 	}
 	if (config.evalEnabled) {
 		log.warn('config: ALLOW_EVAL is enabled. Owner-only eval commands are ACTIVE in this process.');
+	}
+	if ((config.cowoncyAdmins || []).length === 0 && (config.cowoncyAdminRoles || []).length === 0) {
+		log.info('config: no COWONCY_ADMIN_IDS/COWONCY_ADMIN_ROLE_IDS set; `grant` is owner-only');
 	}
 	if (config.debug) {
 		log.info(

@@ -8,9 +8,9 @@
 
 | Item                                        | Jumlah |
 | ------------------------------------------- | ------ |
-| Command terdaftar                           | 284    |
-| Alias unik (semua nama yang bisa dipanggil) | 522    |
-| Command publik                              | 234    |
+| Command terdaftar                           | 285    |
+| Alias unik (semua nama yang bisa dipanggil) | 526    |
+| Command publik                              | 235    |
 | Command staff/owner                         | 50     |
 | Command dengan slash command                | 14     |
 | Kategori                                    | 12     |
@@ -114,7 +114,7 @@ Catatan:
 | `weaponshard`   | `ws`, `weaponshards`, `dismantle` | —                                        | 5s       | —                                                                                                                                                                                               |
 | `zoo`           | `z`                               | {display}                                | 45s      | Displays your zoo! Some animals are rarer than others! Use the 'display' args to display all your animals from your history!                                                                    |
 
-### Ekonomi (economy) — 9 command
+### Ekonomi (economy) — 10 command
 
 | Command     | Alias lain                                       | Argumen                      | Cooldown | Deskripsi                                                                                                                                           |
 | ----------- | ------------------------------------------------ | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -124,9 +124,27 @@ Catatan:
 | `cowoncy`   | `money`, `currency`, `cash`, `credit`, `balance` | —                            | 5s       | Check your cowoncy balance! You can earn more cowoncy through dailies and voting!                                                                   |
 | `daily`     | —                                                | —                            | 5s       | Grab your daily cowoncy every day after 12am PST! Daily streaks will give you extra cowoncy!                                                        |
 | `give`      | `send`                                           | {@user} {amount}             | 5s       | Send some cowoncy to other users! This command must contain a @mention and an amount There is a limit on how much cowoncy you can receive and give. |
+| `grant`     | `addcash`, `addmoney`, `topup`                   | {@user} {amount}             | 3s       | Adds cowoncy to a user out of nowhere! Only bot owners and users/roles in `COWONCY_ADMIN_IDS` / `COWONCY_ADMIN_ROLE_IDS` can use it.                |
 | `quest`     | `q`                                              | [rr \| lock \| unlock] {num} | 5s       | Grab a quest everyday! Complete them to earn rewards! You also have one quest reroll per day! You can earn a new quest after 12am PST               |
 | `shop`      | `market`                                         | —                            | 15s      | Spend your cowoncy for some items!                                                                                                                  |
 | `trade`     | `tr`, `gift`                                     | itemId @user price {count}   | 5s       | Trade an item with a user!                                                                                                                          |
+
+#### Menambah cowoncy: `grant` (khusus user/role tertentu)
+
+Beda dengan `give` (memindahkan saldo sendiri), `grant` **membuat** cowoncy dan
+hanya bisa dipakai oleh:
+
+| Siapa                               | Cara mengaktifkan                          |
+| ----------------------------------- | ------------------------------------------ |
+| Owner bot                           | otomatis (id di `OWNER_IDS`)               |
+| User tertentu                       | `COWONCY_ADMIN_IDS=id1,id2`                |
+| Pemegang role tertentu (per server) | `COWONCY_ADMIN_ROLE_IDS=roleId1,roleId2`   |
+| Batas nominal per grant             | `COWONCY_GRANT_MAX` (default `1000000000`) |
+
+Contoh: `o grant @Scuttler 1000` atau alias `o addcash @Scuttler 1000`.
+Kalau kedua daftar kosong, hanya owner yang bisa memakainya; percobaan yang
+ditolak/diizinkan dicatat sebagai `audit action=cowoncy-grant ...`. Angka harus
+bulat positif, dan semua id/nominal dikirim sebagai parameter SQL.
 
 ### Emotes (emotes) — 1 command
 

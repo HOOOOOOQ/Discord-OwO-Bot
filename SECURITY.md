@@ -45,6 +45,19 @@ This is defence in depth, **not** a sandbox: JavaScript cannot sandbox itself an
 `Function`-constructor escapes remain possible. The real control is that the
 feature is disabled unless an operator explicitly enables it.
 
+### 2b. Creating cowoncy is allowlisted
+
+`grant` (aliases `addcash`, `addmoney`, `topup`) can credit any user with an
+arbitrary amount, so access is resolved by `auth.canGrantCowoncy`:
+
+- bot owners (`OWNER_IDS`) always may,
+- otherwise the caller id must be in `COWONCY_ADMIN_IDS`, or the caller must hold
+  one of the roles in `COWONCY_ADMIN_ROLE_IDS` **in that guild**,
+- empty lists mean owners only — a fork cannot inherit another instance's list,
+- amounts must be positive integers and are capped by `COWONCY_GRANT_MAX`
+  (default 1,000,000,000); ids and amounts are always sent as SQL parameters,
+- allowed and denied attempts are audited (`audit action=cowoncy-grant[-denied]`).
+
 ### 3. SQL access
 
 - Every user-supplied value is passed as a query parameter; the interpolated

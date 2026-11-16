@@ -10,6 +10,10 @@ Default prefix: **`o`**. Override the default with the `PREFIX` environment vari
 or per server with `o prefix <new prefix>` (requires **Manage Channels**).
 Full command list: [COMMANDS.md](COMMANDS.md).
 
+Extra feature: restricted cowoncy grants — `o grant @user 1000` — usable by the
+bot owners plus any users/roles listed in `COWONCY_ADMIN_IDS` /
+`COWONCY_ADMIN_ROLE_IDS` (see [DEPLOYMENT.md](DEPLOYMENT.md#cowoncy-grants-grant)).
+
 ## Self hosting
 
 Requirements: **Node.js ≥ 20**, **MariaDB/MySQL**, **Redis**, and a native

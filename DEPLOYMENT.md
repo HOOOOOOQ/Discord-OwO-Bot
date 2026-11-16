@@ -34,6 +34,27 @@ every owner-only command (including `eval`) is denied. `DEBUG` defaults to
 title come from the same rebrand). Servers can still change their own prefix with
 `o prefix <new prefix>`; the global prefix keeps working alongside it.
 
+### Cowoncy grants (`grant`)
+
+`grant` creates cowoncy out of nothing, so it is allowlisted instead of being
+open to everyone (it is **not** the same as `give`, which moves your own
+balance):
+
+```bash
+# .env — comma separated ids
+COWONCY_ADMIN_IDS=111111111111111111,222222222222222222
+COWONCY_ADMIN_ROLE_IDS=333333333333333333   # per-server role ids
+COWONCY_GRANT_MAX=1000000000                # cap for one grant (default 1e9)
+```
+
+Usage: `o grant @user 1000` (aliases: `addcash`, `addmoney`, `topup`). Owners in
+`OWNER_IDS` can always use it; everyone else needs an allowlisted id or role.
+With both lists empty the command is **owner-only**, so nothing changes for
+public instances. The role check reads the member's roles in the guild where the
+command is used, and the grant is written with a parameterized
+`INSERT ... ON DUPLICATE KEY UPDATE`, then audited
+(`audit action=cowoncy-grant ...`).
+
 ## 2. Database
 
 ```bash

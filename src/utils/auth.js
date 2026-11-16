@@ -31,6 +31,22 @@ exports.hasAnyRole = function (member, roleIds) {
 };
 
 /**
+ * Cowoncy-grant gate (`grant` command): bot owners, explicitly allowlisted user
+ * ids, or members holding an allowlisted role. An empty configuration grants
+ * nobody except owners, so a fork can never inherit another instance's list.
+ */
+exports.canGrantCowoncy = function (userId, member, cfg = config) {
+	if (exports.isOwner(userId, cfg)) return { allowed: true, reason: 'owner' };
+	if (exports.isValidId(userId) && (cfg.cowoncyAdmins || []).includes(userId)) {
+		return { allowed: true, reason: 'grant-user' };
+	}
+	if (exports.hasAnyRole(member, cfg.cowoncyAdminRoles)) {
+		return { allowed: true, reason: 'grant-role' };
+	}
+	return { allowed: false, reason: 'not-allowed' };
+};
+
+/**
  * Full admin-command gate: owner, then staff role inside a configured mod
  * channel. Returns a decision object so callers can log why access was denied.
  */
