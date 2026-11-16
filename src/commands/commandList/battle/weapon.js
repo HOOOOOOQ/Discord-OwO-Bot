@@ -21,7 +21,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo crate', 'owo battle'],
+	related: ['o crate', 'o battle'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -49,14 +49,14 @@ module.exports = new CommandInterface({
 			} else {
 				let uwid = p.args[0];
 				if (uwid.length < uwidMax) await weaponUtil.describe(p, uwid);
-				else p.errorMsg(', Invalid arguments! Use `owo weapon {uniqueWeaponId}`');
+				else p.errorMsg(', Invalid arguments! Use `o weapon {uniqueWeaponId}`');
 			}
 
 			/* Unequip weapon */
 		} else if (p.args.length == 2 && (p.args[0] == 'unequip' || p.args[0] == 'ue')) {
 			if (await battleFriendUtil.inBattle(p)) {
 				p.errorMsg(
-					', You cannot change your weapon while you have a pending battle! Use `owo db` to decline it!',
+					', You cannot change your weapon while you have a pending battle! Use `o db` to decline it!',
 					3000
 				);
 				return;
@@ -64,7 +64,7 @@ module.exports = new CommandInterface({
 
 			let uwid = p.args[1];
 			if (uwid.length < uwidMax) await weaponUtil.unequip(p, uwid);
-			else p.errorMsg(', Invalid arguments! Use `owo weapon unequip {weaponId}`');
+			else p.errorMsg(', Invalid arguments! Use `o weapon unequip {weaponId}`');
 
 			/* view someone's weapons by category */
 		} else if (
@@ -81,7 +81,7 @@ module.exports = new CommandInterface({
 		} else if (p.args.length == 2) {
 			if (await battleFriendUtil.inBattle(p)) {
 				p.errorMsg(
-					', You cannot change your weapon while you have a pending battle! Use `owo db` to decline it!',
+					', You cannot change your weapon while you have a pending battle! Use `o db` to decline it!',
 					3000
 				);
 				return;
@@ -91,27 +91,27 @@ module.exports = new CommandInterface({
 			let pet = p.args[1];
 
 			if (uwid.length >= uwidMax) {
-				p.errorMsg(', Invalid arguments! Use `owo weapon {uniqueWeaponId} {animalPos|animal}`');
+				p.errorMsg(', Invalid arguments! Use `o weapon {uniqueWeaponId} {animalPos|animal}`');
 				return;
 			} else if (p.global.isInt(pet)) {
 				pet = parseInt(pet);
 				if (pet < 1 || pet > 3) {
-					p.errorMsg(', Invalid arguments! Use `owo weapon {uniqueWeaponId} {animalPos|animal}`');
+					p.errorMsg(', Invalid arguments! Use `o weapon {uniqueWeaponId} {animalPos|animal}`');
 					return;
 				}
 			} else {
 				pet = p.global.validAnimal(pet);
 				if (!pet) {
-					p.errorMsg(', Invalid arguments! Use `owo weapon {uniqueWeaponId} {animalPos|animal}`');
+					p.errorMsg(', Invalid arguments! Use `o weapon {uniqueWeaponId} {animalPos|animal}`');
 					return;
 				}
 			}
 
 			if (!(await weaponUtil.equip(p, uwid, pet))) {
 				p.errorMsg(
-					', could not find that weapon or animal! The correct command is `owo weapon {weaponID} {animal}`\n' +
+					', could not find that weapon or animal! The correct command is `o weapon {weaponID} {animal}`\n' +
 						p.config.emoji.blank +
-						' **|** The weaponID can be found in the command `owo weapon`'
+						' **|** The weaponID can be found in the command `o weapon`'
 				);
 			}
 

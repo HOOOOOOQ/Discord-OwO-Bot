@@ -25,9 +25,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Displays your ranking of each category!\nYou can choose you rank within the server or globally!\nYou can also shorten the command like in the example!',
 
-	example: ['owo my zoo', 'owo my cowoncy global', 'owo my p g'],
+	example: ['o my zoo', 'o my cowoncy global', 'o my p g'],
 
-	related: ['owo top'],
+	related: ['o top'],
 
 	permissions: ['sendMessages'],
 

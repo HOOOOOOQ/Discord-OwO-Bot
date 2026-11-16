@@ -25,7 +25,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo money'],
+	related: ['o money'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -141,7 +141,7 @@ async function blackjack(p, player, dealer, bet, resume) {
 
 	collector.on('end', (collected, reason) => {
 		if (reason == 'time')
-			message.edit('**⏱ |** This session has expired. Retype `owo blackjack` to resume');
+			message.edit('**⏱ |** This session has expired. Retype `o blackjack` to resume');
 	});
 }
 

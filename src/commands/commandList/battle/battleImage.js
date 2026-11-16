@@ -5,7 +5,7 @@
  * For more information, see README.md and LICENSE
  */
 
-const request = require('request');
+const request = require('../../../utils/http.js');
 const WeaponInterface = require('./WeaponInterface.js');
 
 /* Generates a battle image by my battle image generation api */

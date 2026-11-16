@@ -23,7 +23,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Grab a quest everyday! Complete them to earn rewards! You also have one quest reroll per day! You can earn a new quest after 12am PST',
 
-	example: ['owo quest', 'owo quest rr 1', 'owo quest lock 1', 'owo quest unlock 1'],
+	example: ['o quest', 'o quest rr 1', 'o quest lock 1', 'o quest unlock 1'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 

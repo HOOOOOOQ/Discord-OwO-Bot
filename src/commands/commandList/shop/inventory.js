@@ -22,11 +22,11 @@ module.exports = new CommandInterface({
 
 	args: '',
 
-	desc: "Displays your inventory! Use 'owo equip' to use them!",
+	desc: "Displays your inventory! Use 'o equip' to use them!",
 
 	example: [],
 
-	related: ['owo equip'],
+	related: ['o equip'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 

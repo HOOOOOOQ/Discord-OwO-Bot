@@ -22,7 +22,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Collect Army Emblems for your server! You get 15 per day. This command was created by KITSUNE!',
 
-	example: ['owo army', 'owo army s'],
+	example: ['o army', 'o army s'],
 
 	related: [],
 

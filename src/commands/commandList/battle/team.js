@@ -18,9 +18,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Display your team! ',
 
-	example: ['owo team', 'owo team add dog 1', 'owo team rename My Team'],
+	example: ['o team', 'o team add dog 1', 'o team rename My Team'],
 
-	related: ['owo battle'],
+	related: ['o battle'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -50,7 +50,7 @@ module.exports = new CommandInterface({
 		) {
 			if (await battleFriendUtil.inBattle(p))
 				p.errorMsg(
-					', You cannot change your team while you have a pending battle! Use `owo db` to decline',
+					', You cannot change your team while you have a pending battle! Use `o db` to decline',
 					3000
 				);
 			else await add(p);
@@ -59,7 +59,7 @@ module.exports = new CommandInterface({
 		} else if (subcommand == 'remove' || subcommand == 'delete' || subcommand == 'd') {
 			if (await battleFriendUtil.inBattle(p))
 				p.errorMsg(
-					', You cannot change your team while you have a pending battle! Use `owo db` to decline',
+					', You cannot change your team while you have a pending battle! Use `o db` to decline',
 					3000
 				);
 			else await remove(p);
@@ -72,7 +72,7 @@ module.exports = new CommandInterface({
 			p.hcommand = "team";
 		}
 		*/
-		/* No command */ else p.errorMsg(', wrong subcommand! Please check `owo help team`', 3000);
+		/* No command */ else p.errorMsg(', wrong subcommand! Please check `o help team`', 3000);
 	},
 });
 
@@ -93,7 +93,7 @@ async function displayTeam(p) {
 async function add(p) {
 	/* Check if valid # of args */
 	if (p.args.length <= 1) {
-		p.errorMsg(', the correct command is `owo team add {animal} {position}`!', 5000);
+		p.errorMsg(', the correct command is `o team add {animal} {position}`!', 5000);
 		return;
 	}
 
@@ -126,7 +126,7 @@ async function add(p) {
 async function remove(p) {
 	/* Check if valid # of args */
 	if (p.args.length < 2) {
-		p.errorMsg(', the correct command is `owo team remove {animal|position}`!', 5000);
+		p.errorMsg(', the correct command is `o team remove {animal|position}`!', 5000);
 		return;
 	}
 
@@ -159,7 +159,7 @@ async function remove(p) {
 async function rename(p) {
 	/* validate */
 	if (p.args.length < 2) {
-		p.errorMsg(', the correct command is `owo team rename {name}`!', 5000);
+		p.errorMsg(', the correct command is `o team rename {name}`!', 5000);
 		return;
 	}
 

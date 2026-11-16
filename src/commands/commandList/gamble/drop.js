@@ -15,9 +15,9 @@ module.exports = new CommandInterface({
 
 	args: '{amount}',
 
-	desc: "This command is now deprecated. ~~Drop some cowoncy in a channel with 'owo drop {amount}'! Users can pick it up with 'owo pickup {amount}' If you try to pick up more than what's on the floor, you'll lose that amount! Be careful!~~",
+	desc: "This command is now deprecated. ~~Drop some cowoncy in a channel with 'o drop {amount}'! Users can pick it up with 'o pickup {amount}' If you try to pick up more than what's on the floor, you'll lose that amount! Be careful!~~",
 
-	example: ['owo drop 3000'],
+	example: ['o drop 3000'],
 
 	related: [],
 
@@ -67,7 +67,7 @@ async function drop(p) {
 			p.getName() +
 			'** dropped **' +
 			p.global.toFancyNum(amount) +
-			'** cowoncy!\n**<:blank:427371936482328596> |** Use `owo pickup` to pick it up! ',
+			'** cowoncy!\n**<:blank:427371936482328596> |** Use `o pickup` to pick it up! ',
 		8000
 	);
 	p.quest('drop');

@@ -16,7 +16,7 @@ module.exports = new CommandInterface({
 
 	example: ['owodex dog', 'owodex cat'],
 
-	related: ['owo zoo'],
+	related: ['o zoo'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 
@@ -34,7 +34,7 @@ module.exports = new CommandInterface({
 		let animal = args[0] ? global.validAnimal(args[0]) : undefined;
 
 		if (args.length > 1 || args.length == 0) {
-			p.errorMsg(', the correct command is `owo dex {animal}`!', 3000);
+			p.errorMsg(', the correct command is `o dex {animal}`!', 3000);
 			return;
 		} else if (!animal) {
 			p.errorMsg(', I could not find that animal in your zoo!', 3000);
@@ -73,7 +73,7 @@ module.exports = new CommandInterface({
 		let rarity = global.toFancyNum(totalAnimals) + ' total caught';
 		let nickname = '';
 		if (result[0].nickname) nickname = '**Nickname:** ' + result[0].nickname + '\n';
-		let desc = "*No description created\nHave a fun/creative description?\nUse 'owo feedback'!*";
+		let desc = "*No description created\nHave a fun/creative description?\nUse 'o feedback'!*";
 		if (animal.description) {
 			desc = '*' + animal.description.trim() + '*';
 			let ids = desc.match(/\?[0-9]+\?/g);

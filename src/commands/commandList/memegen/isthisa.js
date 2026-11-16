@@ -8,7 +8,7 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const fs = require('fs');
-const request = require('request').defaults({ encoding: null });
+const request = require('../../../utils/http.js').defaults({ encoding: null });
 const { Canvas, Image } = require('canvas');
 
 module.exports = new CommandInterface({
@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	desc: "Creates a 'is this a ___?' meme! You can also tag a user to use their image!",
 
-	example: ['owo isthisa Is this an AI? | @OwO | me'],
+	example: ['o isthisa Is this an AI? | @OwO | me'],
 
 	related: [],
 

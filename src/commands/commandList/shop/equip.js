@@ -21,9 +21,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Use items from your inventory!',
 
-	example: ['owo equip 50', 'owo equip 57 71 78', 'owo equip 101'],
+	example: ['o equip 50', 'o equip 57 71 78', 'o equip 101'],
 
-	related: ['owo inv', 'owo weapon'],
+	related: ['o inv', 'o weapon'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

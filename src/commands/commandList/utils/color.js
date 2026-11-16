@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const request = require('request');
+const request = require('../../../utils/http.js');
 const maxInt = 16777215;
 const Vibrant = require('node-vibrant');
 const colorEmoji = '🎨';
@@ -22,12 +22,12 @@ module.exports = new CommandInterface({
 	desc: 'Use the command without any parameters to get a random color!\n\nYou can also tag a user as an argument to parse prominent colors from their avatar!\n\nYou can view color roles by adding the text "role" and tagging a user\n\nYou can also view specific colors with RGB, HEX, or HSL values!',
 
 	example: [
-		'owo color',
-		'owo color @user',
-		'owo color role @user',
-		'owo color #FFFFFF',
-		'owo color 255,255,255',
-		'owo color S:50% L:50%',
+		'o color',
+		'o color @user',
+		'o color role @user',
+		'o color #FFFFFF',
+		'o color 255,255,255',
+		'o color S:50% L:50%',
 	],
 
 	related: [],

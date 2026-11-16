@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo stats, owo shard'],
+	related: ['o stats, o shard'],
 
 	permissions: ['sendMessages'],
 

@@ -69,9 +69,9 @@ class Luv extends Collectible {
 		} else if (rand < 0.94) {
 			result = await p.redis.hincrby(`data_${p.msg.author.id.id}`, data, 1);
 			const randMsg = [
-				"<:roopeek:1099238720797941762> **|** what's this owo luv command you're refering too?",
-				'<:roopeek:1099238720797941762> **|** owo luv? never heard of it',
-				"<:roopeek:1099238720797941762> **|** owo luv huh? that's funny, try again",
+				"<:roopeek:1099238720797941762> **|** what's this o luv command you're refering too?",
+				'<:roopeek:1099238720797941762> **|** o luv? never heard of it',
+				"<:roopeek:1099238720797941762> **|** o luv huh? that's funny, try again",
 			];
 			msgOverride = randMsg[Math.floor(Math.random() * randMsg.length)];
 		} else if (rand < 0.99) {

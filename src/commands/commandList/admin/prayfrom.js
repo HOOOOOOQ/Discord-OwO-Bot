@@ -33,7 +33,7 @@ module.exports = new CommandInterface({
 
 async function banList(p) {
 	if (p.args[0] != 'ban') {
-		p.errorMsg(', Invalid syntax! The correct use is `owo prayfrom ban {id} {minPrayCount}`', 4000);
+		p.errorMsg(', Invalid syntax! The correct use is `o prayfrom ban {id} {minPrayCount}`', 4000);
 		return;
 	}
 	let userid = p.args[1];

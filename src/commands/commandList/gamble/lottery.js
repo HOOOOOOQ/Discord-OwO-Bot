@@ -16,9 +16,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Bet your money in the lottery! The more money you bet, the higher the chance to win!\nThe lottery ends at 12am PST everyday!',
 
-	example: ['owo lottery 1000'],
+	example: ['o lottery 1000'],
 
-	related: ['owo money'],
+	related: ['o money'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 

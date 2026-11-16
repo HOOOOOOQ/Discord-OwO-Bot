@@ -24,7 +24,7 @@ class ShootingStar extends Collectible {
 		this.fullControl = true;
 		this.ownerOnly = true;
 		this.giveAmount = 1;
-		this.description = `Give out a shooting star!\n\nMerge two shooting stars with \`owo shootingstar unite\`!`;
+		this.description = `Give out a shooting star!\n\nMerge two shooting stars with \`o shootingstar unite\`!`;
 		this.displayMsg =
 			'**<a:purplestar:1080027292102823966><a:pinkstar:1080027395295285368> Make a wish! <a:purplestar:1080027292102823966><a:pinkstar:1080027395295285368>' +
 			'\n✧<:dash:1080027541466783825><:dash:1080027541466783825><:dash:1080027541466783825><:dash:1080027541466783825><:dash:1080027541466783825><:dash:1080027541466783825><:dash:1080027541466783825>✧' +

@@ -19,7 +19,7 @@ module.exports = new CommandInterface({
 
 	example: [''],
 
-	related: ['owo zoo', 'owo pet', 'owo team', 'owo weapon'],
+	related: ['o zoo', 'o pet', 'o team', 'o weapon'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -70,7 +70,7 @@ async function isFriendlyBattle() {
 			return true;
 		}
 		if (!id) {
-			await this.errorMsg(', The correct command is `owo battle @user`!', 3000);
+			await this.errorMsg(', The correct command is `o battle @user`!', 3000);
 		} else if (id == this.msg.author.id) {
 			battleFriendUtil.challenge(this, this.msg.author);
 		} else {

@@ -18,9 +18,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Select a different team!',
 
-	example: ['owo teams', 'owo setteam 2'],
+	example: ['o teams', 'o setteam 2'],
 
-	related: ['owo battle', 'owo team'],
+	related: ['o battle', 'o team'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -36,7 +36,7 @@ module.exports = new CommandInterface({
 		} else if (p.global.isInt(p.args[0])) {
 			setTeam(p, +p.args[0]);
 		} else {
-			p.errorMsg(', the correct syntax is `owo setteam {teamNumber}`', 3000);
+			p.errorMsg(', the correct syntax is `o setteam {teamNumber}`', 3000);
 		}
 	},
 });
@@ -111,7 +111,7 @@ async function displayTeams(p) {
 	let activeTeam = 0;
 	const teamsOrder = {};
 	if (!result[2].length) {
-		p.errorMsg(", you don't have a team! Create one with `owo team add {animalName}`!", 5000);
+		p.errorMsg(", you don't have a team! Create one with `o team add {animalName}`!", 5000);
 		return;
 	}
 	// Find current active team
@@ -149,7 +149,7 @@ async function displayTeams(p) {
 					icon_url: p.msg.author.avatarURL,
 				},
 				description:
-					'`owo team add {animal} {pos}` Add an animal to your team\n`owo team remove {pos}` Removes an animal from your team\n`owo team rename {name}` Renames your team\n`owo rename {animal} {name}` Rename an animal\n`owo setteam {teamNum}` to set multiple teams',
+					'`o team add {animal} {pos}` Add an animal to your team\n`o team remove {pos}` Removes an animal from your team\n`o team rename {name}` Renames your team\n`o rename {animal} {name}` Rename an animal\n`o setteam {teamNum}` to set multiple teams',
 				color: p.config.embed_color,
 				footer: {
 					text: `Current Streak: 0 | Highest Streak: 0 | Page ${i + 1}/${maxTeams}`,
@@ -159,7 +159,7 @@ async function displayTeams(p) {
 			for (let j = 1; j <= 3; j++) {
 				teams[i].fields.push({
 					name: 'none',
-					value: '*`owo team add {animal} ' + j + '`*',
+					value: '*`o team add {animal} ' + j + '`*',
 					inline: true,
 				});
 			}
@@ -217,7 +217,7 @@ async function setTeam(p, teamNum, dontDisplay) {
 
 	if (await battleFriendUtil.inBattle(p)) {
 		p.errorMsg(
-			', You cannot change your team while you have a pending battle! Use `owo db` to decline',
+			', You cannot change your team while you have a pending battle! Use `o db` to decline',
 			3000
 		);
 		return;
@@ -231,7 +231,7 @@ async function setTeam(p, teamNum, dontDisplay) {
 	let result = await p.query(sql);
 
 	if (!result[0]) {
-		p.errorMsg(", you don't have any animals! Get some with `owo hunt`!", 3000);
+		p.errorMsg(", you don't have any animals! Get some with `o hunt`!", 3000);
 		return;
 	}
 

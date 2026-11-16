@@ -20,9 +20,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Express your emotions on others!',
 
-	example: ['owo ' + emoteList.join('|')],
+	example: ['o ' + emoteList.join('|')],
 
-	related: ['owo cry', 'owo pout', 'owo dance', 'and more'],
+	related: ['o cry', 'o pout', 'o dance', 'and more'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

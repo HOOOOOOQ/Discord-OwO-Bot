@@ -6,7 +6,7 @@
  */
 
 const interval = 300000;
-const request = require('request');
+const request = require('./http.js');
 
 class InfoUpdater {
 	constructor(main) {

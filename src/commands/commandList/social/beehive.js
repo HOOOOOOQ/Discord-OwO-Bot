@@ -19,7 +19,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Display your pride-ful bees! These bees can only be obtained during certain weeks of pride month.',
 
-	example: ['owo beehive'],
+	example: ['o beehive'],
 
 	related: [],
 

@@ -31,7 +31,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo daily', 'owo money'],
+	related: ['o daily', 'o money'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 
@@ -48,7 +48,7 @@ module.exports = new CommandInterface({
 			let text = `**${p.config.emoji.check} | Your daily vote is available!**\n`;
 			text += '**<:blank:427371936482328596> |** You can vote every 12 hours!';
 			//text += "**⚠ |** Automatic votes are currently broken!\n";
-			//text += "**<:blank:427371936482328596> |** Please retype `owo vote` 1-10min after you vote!\n";
+			//text += "**<:blank:427371936482328596> |** Please retype `o vote` 1-10min after you vote!\n";
 			p.send({ content: text, components: voteComponent });
 			return;
 		}

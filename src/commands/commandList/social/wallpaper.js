@@ -19,9 +19,9 @@ module.exports = new CommandInterface({
 
 	desc: 'View your current wallpapers! Equipped them by clicking the wallpaper emoji.\nYou can buy more wallpapers from the shop.',
 
-	example: ['owo wallpaper', 'owo wallpaper 201'],
+	example: ['o wallpaper', 'o wallpaper 201'],
 
-	related: ['owo shop', 'owo profile'],
+	related: ['o shop', 'o profile'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles', 'addReactions'],
 
@@ -106,7 +106,7 @@ async function createPage(p, page, totalPages) {
 		if (result[0].profile) embed.description += '   *Currently Equipped*';
 		embed.bid = result[0].bid;
 	} else {
-		embed.description = "You don't have any wallpapers! :c Purchase one in `owo shop`!";
+		embed.description = "You don't have any wallpapers! :c Purchase one in `o shop`!";
 		delete embed.footer;
 	}
 

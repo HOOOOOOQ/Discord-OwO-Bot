@@ -5,14 +5,8 @@
  * For more information, see README.md and LICENSE
  */
 
-const whitelist = [
-	'409959187229966337',
-	'420104212895105044',
-	'552384921914572802',
-	'1149820261168849006',
-	'1218415296646484008',
-];
 const levels = require('../utils/levels.js');
+const errors = require('../utils/errors.js');
 /* eslint-disable-next-line */
 const blacklist = require('../utils/blacklist.js');
 const survey = require('../utils/survey.js');
@@ -30,7 +24,7 @@ exports.handle = async function (msg, raw) {
 		/* Ignore guilds if in debug mode */
 		this.debug &&
 		msg.channel.guild &&
-		!whitelist.includes(msg.channel.guild.id)
+		!(this.config.debugWhitelist || []).includes(msg.channel.guild.id)
 	) {
 		return;
 	} else if (await this.command.executeAdmin(msg, raw)) {
@@ -42,7 +36,12 @@ exports.handle = async function (msg, raw) {
 			survey.handle.bind(this)(msg);
 		}
 	} else {
-		this.command.execute(msg, raw);
-		levels.giveXP(msg);
+		// Awaited and contained: dispatch and XP bookkeeping are both async and
+		// used to run as floating promises, so any failure became an unhandled
+		// rejection that killed the cluster.
+		await this.command.execute(msg, raw);
+		await errors
+			.wrapAsync(levels.giveXP, { stage: 'levels' })(msg)
+			.catch((err) => errors.logFailure(err, { stage: 'levels' }));
 	}
 };

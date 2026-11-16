@@ -22,9 +22,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Flip a coin to earn some cowoncy! You can also shorten the command like in the example!',
 
-	example: ['owo coinflip head 25', 'owo cf t 25'],
+	example: ['o coinflip head 25', 'o cf t 25'],
 
-	related: ['owo money'],
+	related: ['o money'],
 
 	permissions: ['sendMessages'],
 

@@ -19,7 +19,7 @@ class Poison extends Collectible {
 		this.dailyOnly = true;
 		this.giveAmount = 2;
 		this.description =
-			"Love could be labeled poison and we'd drink it anyways.\n\nSubcommands: owo poison mix";
+			"Love could be labeled poison and we'd drink it anyways.\n\nSubcommands: o poison mix";
 		this.displayMsg = [
 			'?emoji? **| ?user?**, you currently have ?count? poison?plural? ?emoji? and ?mergeCount? poison ivy ?mergeEmoji?! Toxins are running through your veins.',
 			'?emoji? **| ?user?**, you currently have ?count? poison?plural? ?emoji? and ?mergeCount? poison ivy ?mergeEmoji?! Oh you poor thing! Are you still okay?',

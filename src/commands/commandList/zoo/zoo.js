@@ -18,9 +18,9 @@ module.exports = new CommandInterface({
 
 	desc: "Displays your zoo! Some animals are rarer than others! Use the 'display' args to display all your animals from your history!",
 
-	example: ['owo zoo', 'owo zoo -display', 'owo zoo -nopages'],
+	example: ['o zoo', 'o zoo -display', 'o zoo -nopages'],
 
-	related: ['owo hunt', 'owo sell'],
+	related: ['o hunt', 'o sell'],
 
 	permissions: ['sendMessages'],
 

@@ -5,7 +5,7 @@
  * For more information, see README.md and LICENSE
  */
 
-const config = require('../data/config.json');
+const config = require('./config.js');
 
 const warningEmoji = '⚠️';
 let warnedList = {};

@@ -83,7 +83,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Ask a question and get an answer!',
 
-	example: ['owo 8b Am I cute?'],
+	example: ['o 8b Am I cute?'],
 
 	related: [],
 

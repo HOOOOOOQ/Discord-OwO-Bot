@@ -403,7 +403,7 @@ let getDisplayPage = async function (p, user, page, sort, opt = {}) {
 	/* Parse actual weapon data for each weapon */
 	let descUser = `These weapons belong to <@${user.id}>`;
 	let descHelp =
-		'Description: `owo weapon {weaponID}`\nEquip: `owo weapon {weaponID} {animal}`\nUnequip: `owo weapon unequip {weaponID}`\nReroll: `owo w rr {weaponID} [passive|stat]`\nSell: `owo sell {weaponID|cw,rw,uw...}`\nDismantle: `owo dismantle {weaponID|cw,rw,uw...}`\n';
+		'Description: `o weapon {weaponID}`\nEquip: `o weapon {weaponID} {animal}`\nUnequip: `o weapon unequip {weaponID}`\nReroll: `o w rr {weaponID} [passive|stat]`\nSell: `o sell {weaponID|cw,rw,uw...}`\nDismantle: `o dismantle {weaponID|cw,rw,uw...}`\n';
 	let desc = '';
 	let fieldText;
 	let fields = [];
@@ -637,7 +637,7 @@ exports.describe = async function (p, uwid) {
 	/* If no weapon */
 	if (!weapon) {
 		p.errorMsg(
-			', I could not find a weapon with that unique weapon id! Please use `owo weapon` for the weapon ID!'
+			', I could not find a weapon with that unique weapon id! Please use `o weapon` for the weapon ID!'
 		);
 		return;
 	}

@@ -8,18 +8,18 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const commandGroups = require('../../../utils/commandGroups.js');
-const request = require('request');
+const request = require('../../../utils/http.js');
 
 module.exports = new CommandInterface({
 	alias: ['waddle'],
 
 	args: '@user|emoji',
 
-	desc: 'Create a waddle emoji! You can add it to server if you have used `owo emoji set`',
+	desc: 'Create a waddle emoji! You can add it to server if you have used `o emoji set`',
 
-	example: ['owo waddle @user', 'owo waddle :emoji:'],
+	example: ['o waddle @user', 'o waddle :emoji:'],
 
-	related: ['owo emoji'],
+	related: ['o emoji'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

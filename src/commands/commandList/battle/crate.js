@@ -21,7 +21,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo weapon', 'owo battle'],
+	related: ['o weapon', 'o battle'],
 
 	permissions: ['sendMessages'],
 

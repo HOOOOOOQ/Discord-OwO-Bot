@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const ud = require('urban-dictionary');
+const ud = require('../../../utils/urbanDictionary.js');
 const nextPageEmoji = '➡️';
 const prevPageEmoji = '⬅️';
 
@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	desc: 'I shall define thy word!',
 
-	example: ['owo define tsundere'],
+	example: ['o define tsundere'],
 
 	related: [],
 

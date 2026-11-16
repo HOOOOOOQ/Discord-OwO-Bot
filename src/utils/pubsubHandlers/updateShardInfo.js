@@ -8,7 +8,7 @@
 let cooldown = 3000;
 let onCooldown = false;
 
-const request = require('request');
+const request = require('../http.js');
 
 exports.handle = async function (main, _message) {
 	if (onCooldown) return;

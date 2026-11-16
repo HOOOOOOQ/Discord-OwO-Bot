@@ -1,5 +1,5 @@
 const mysql = require('../botHandlers/mysqlHandler.js');
-const request = require('request');
+const request = require('./http.js');
 const levels = require('./levels.js');
 const global = require('./global.js');
 const DataResolver = require('./dataResolver.js');
@@ -114,7 +114,7 @@ exports.distributeRewards = async function (msg) {
 		text +=
 			'\n' +
 			infoEmoji +
-			' **|** Level up messages can be disabled for the guild with `owo level disabletext`';
+			' **|** Level up messages can be disabled for the guild with `o level disabletext`';
 
 	// distribute and send
 	await mysql.query(sql);

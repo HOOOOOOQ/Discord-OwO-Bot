@@ -18,15 +18,15 @@ module.exports = new CommandInterface({
 	desc: 'Sell animals from your zoo! Selling animals will NOT affect your zoo score!\nYou can also sell weapons by their unique weaponID!\nSelling animals will not prevent you from using them in battle!',
 
 	example: [
-		'owo sell dog',
-		'owo sell cat 1',
-		'owo sell ladybug all',
-		'owo sell uncommon',
-		'owo sell all',
-		'owo sell rareweapons',
+		'o sell dog',
+		'o sell cat 1',
+		'o sell ladybug all',
+		'o sell uncommon',
+		'o sell all',
+		'o sell rareweapons',
 	],
 
-	related: ['owo hunt'],
+	related: ['o hunt'],
 
 	permissions: ['sendMessages'],
 
@@ -98,7 +98,7 @@ module.exports = new CommandInterface({
 				p.send(
 					'**🚫 | ' +
 						p.getName() +
-						'**, The correct syntax for selling ranks is `owo sell {animal} {count}`!',
+						'**, The correct syntax for selling ranks is `o sell {animal} {count}`!',
 					3000
 				);
 
@@ -106,9 +106,7 @@ module.exports = new CommandInterface({
 		} else if ((rank = global.validRank(name))) {
 			if (args.length != 1)
 				p.send(
-					'**🚫 | ' +
-						p.getName() +
-						'**, The correct syntax for selling ranks is `owo sell {rank}`!',
+					'**🚫 | ' + p.getName() + '**, The correct syntax for selling ranks is `o sell {rank}`!',
 					3000
 				);
 			else await sellRanks.bind(p)([rank]);

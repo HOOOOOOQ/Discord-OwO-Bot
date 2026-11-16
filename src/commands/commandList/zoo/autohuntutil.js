@@ -10,7 +10,14 @@ let macro;
 try {
 	macro = require('../../../../../tokens/macro.js');
 } catch (e) {
-	console.error('Missing macro.js. Please add this file to ../tokens/macro.js\n', e);
+	// Same fallback as src/utils/levels.js so self-hosted installs work with the
+	// file shipped in ./secret
+	try {
+		macro = require('../../../../secret/macro.js');
+	} catch (secretError) {
+		console.warn('Missing macro.js, autohunt macro checks are disabled');
+		macro = null;
+	}
 }
 const traits = {
 	efficiency: { inc: 10, pow: 1.748, base: 25, upg: 1, max: 215, prefix: '/H' },

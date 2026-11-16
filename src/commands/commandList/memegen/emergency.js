@@ -8,7 +8,7 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const commandGroups = require('../../../utils/commandGroups.js');
-const request = require('request');
+const request = require('../../../utils/http.js');
 const Vibrant = require('node-vibrant');
 const rocketEmoji = '🚀';
 

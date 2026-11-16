@@ -29,7 +29,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo money'],
+	related: ['o money'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

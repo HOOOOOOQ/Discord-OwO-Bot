@@ -16,14 +16,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Sacrifice an animal to turn them into animal essence! Animal essence is used to upgrade your huntbot!\nSacrificing animals will not prevent you from using them in battle!',
 
-	example: [
-		'owo sacrifice dog',
-		'owo sacrifice rare',
-		'owo sacrifice bug 100',
-		'owo sacrifice all',
-	],
+	example: ['o sacrifice dog', 'o sacrifice rare', 'o sacrifice bug 100', 'o sacrifice all'],
 
-	related: ['owo autohunt', 'owo upgrade'],
+	related: ['o autohunt', 'o upgrade'],
 
 	permissions: ['sendMessages'],
 
@@ -93,14 +88,14 @@ module.exports = new CommandInterface({
 			if (args.length < 3) await sellAnimal(p, msg, con, animal, count, p.send, global);
 			else
 				p.errorMsg(
-					', The correct syntax for sacrificing ranks is `owo sacrifice {animal} {count}`!',
+					', The correct syntax for sacrificing ranks is `o sacrifice {animal} {count}`!',
 					3000
 				);
 
 			//if rank...
 		} else if ((rank = global.validRank(name))) {
 			if (args.length != 1)
-				p.errorMsg(', The correct syntax for sacrificing ranks is `owo sacrifice {rank}`!', 3000);
+				p.errorMsg(', The correct syntax for sacrificing ranks is `o sacrifice {rank}`!', 3000);
 			else await sellRanks.bind(p)([rank]);
 
 			//if neither...
@@ -111,10 +106,11 @@ module.exports = new CommandInterface({
 });
 
 async function sellAnimal(p, msg, con, animal, count, send, global) {
-	let sql = `SELECT * FROM autohunt WHERE id = ${msg.author.id};`;
-	let result = await p.query(sql);
-	if (!result[0])
-		await p.query(`INSERT IGNORE INTO autohunt (id,essence) VALUES (${msg.author.id},0);`);
+	let sql = 'SELECT * FROM autohunt WHERE id = ?;';
+	let result = await p.query(sql, [msg.author.id]);
+	if (!result[0]) {
+		await p.query('INSERT IGNORE INTO autohunt (id,essence) VALUES (?,0);', [msg.author.id]);
+	}
 
 	if (count != 'all' && count <= 0) {
 		send('**🚫 |** You need to sacrifice more than 1 silly~', 3000);

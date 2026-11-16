@@ -6,7 +6,7 @@
  */
 
 const fs = require('fs');
-const request = require('request').defaults({ encoding: null });
+const request = require('../../../utils/http.js').defaults({ encoding: null });
 const { createCanvas, Image } = require('canvas');
 const font = 'Impact';
 

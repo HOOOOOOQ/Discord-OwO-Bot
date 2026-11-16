@@ -763,8 +763,8 @@ function arichy(text, type) {
 			text.fields[0].value =
 				'There are some tips which will help you feel like home.' +
 				'\nIn our Kingdom we have Well of Power - you can use it for increasing your power and meet more allies.' +
-				'\nTo upgrade one of traits, use the spell `owo upgrade {trait}`.' +
-				'\nTo obtain more power, use `owo sacrifice {animal} {count}`.' +
+				'\nTo upgrade one of traits, use the spell `o upgrade {trait}`.' +
+				'\nTo obtain more power, use `o sacrifice {animal} {count}`.' +
 				"\nDon't worry, it will not harm any of our friends - you can visit them anytime in their Villages.";
 			text.fields[1].name = text.fields[1].name.replace(
 				'⏱ Efficiency',

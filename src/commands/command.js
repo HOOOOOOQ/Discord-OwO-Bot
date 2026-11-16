@@ -9,6 +9,9 @@ const requireDir = require('require-dir');
 const dir = requireDir('./commandList', { recurse: true });
 
 const CommandInterface = require('./CommandInterface.js');
+const auth = require('../utils/auth.js');
+const errors = require('../utils/errors.js');
+const log = require('../utils/log.js');
 
 const commands = {};
 const adminCommands = {};
@@ -27,6 +30,16 @@ class Command {
 	}
 
 	async execute(msg, raw) {
+		try {
+			return await this.dispatch(msg, raw);
+		} catch (err) {
+			// Never let a dispatch failure escape into the event loop
+			errors.logFailure(err, { stage: 'dispatch', user: msg?.author?.id });
+			return undefined;
+		}
+	}
+
+	async dispatch(msg, raw) {
 		// Parse content info
 		let { args, context } = (await checkPrefix(this.main, msg)) || {};
 		const containsPoints =
@@ -84,10 +97,12 @@ class Command {
 	}
 
 	async executeAdmin(msg) {
-		if (msg.content.toLowerCase().indexOf(this.prefix) !== 0) {
+		const cfg = this.main.config;
+		if (!msg?.content || msg.content.toLowerCase().indexOf(this.prefix) !== 0) {
 			return false;
 		}
 		let { args, context } = (await checkPrefix(this.main, msg)) || {};
+		if (!args) return false;
 		let command = args.shift().toLowerCase();
 		let commandObj = adminCommands[command];
 		if (!commandObj) {
@@ -95,31 +110,22 @@ class Command {
 		}
 		let param = initParam(msg, command, args, this.main, context);
 
-		if (commandObj.owner && msg.author.id === this.main.config.owner) {
-			adminCommands[command].execute(param);
-			return true;
-		} else if (this.main.config.modChannels.includes(msg.channel.id)) {
-			if (
-				commandObj.admin &&
-				this.main.config.role.admin.find((id) => msg.member?.roles.includes(id))
-			) {
-				adminCommands[command].execute(param);
-				return true;
-			} else if (
-				commandObj.manager &&
-				this.main.config.role.manager.find((id) => msg.member?.roles.includes(id))
-			) {
-				adminCommands[command].execute(param);
-				return true;
-			} else if (
-				commandObj.helper &&
-				this.main.config.role.helper.find((id) => msg.member?.roles.includes(id))
-			) {
-				adminCommands[command].execute(param);
-				return true;
+		const decision = auth.canRunAdmin(commandObj, msg, cfg);
+		if (!decision.allowed) {
+			if (decision.reason === 'eval-disabled') {
+				auth.audit('eval-blocked', msg, { command });
+				log.warn(`eval command "${command}" blocked: ALLOW_EVAL is not enabled`);
 			}
+			return false;
 		}
-		return false;
+
+		auth.audit('admin-command', msg, { command, result: decision.reason });
+		try {
+			await commandObj.execute(param);
+		} catch (err) {
+			errors.logFailure(err, { stage: 'admin-command', command, user: msg.author.id });
+		}
+		return true;
 	}
 
 	checkRaw(raw) {
@@ -153,19 +159,26 @@ class Command {
 
 async function executeCommand(main, p) {
 	let { ban, cooldown, logger } = main;
+	const commandName = p.commandAlias || p.command;
 
-	// Check if the command/user/channel is banned
-	if (!(await ban.check(p, p.commandAlias))) return;
+	try {
+		// Check if the command/user/channel is banned
+		if (!(await ban.check(p, p.commandAlias))) return;
 
-	// Check for cooldowns
-	if (!(await cooldown.check(p, p.commandAlias))) return;
+		// Check for cooldowns
+		if (!(await cooldown.check(p, p.commandAlias))) return;
 
-	// Execute command
-	await commands[p.command].execute(p);
+		// Execute command. A thrown command is logged and answered once, never
+		// propagated to the event loop where it would kill the cluster.
+		await errors.runCommandSafely(p, () => commands[p.command].execute(p));
 
-	// Log stats to statsd
-	logger.command(p.commandAlias, p.msg);
-	logger.logstash(p.commandAlias, p);
+		// Log stats to statsd
+		logger.command(commandName, p.msg);
+		logger.logstash(commandName, p);
+	} catch (err) {
+		// ban/cooldown/metrics failures must not crash the process either
+		errors.logFailure(err, { stage: 'command-pipeline', command: commandName });
+	}
 }
 
 /**
@@ -195,6 +208,15 @@ function initCommands() {
 		let name = alias[0];
 		if (alias) {
 			for (let i = 0; i < alias.length; i++) {
+				const existing = commands[alias[i]];
+				if (existing && existing !== command) {
+					// Two modules registering the same alias used to be resolved
+					// silently (last one wins). Keep that behaviour but make the
+					// shadowing visible.
+					log.warn(
+						`duplicate alias "${alias[i]}" registered by ${alias[0]}; it shadows another command`
+					);
+				}
 				commands[alias[i]] = command;
 				if (command.distinctAlias) {
 					aliasToCommand[alias[i]] = alias[i];
@@ -411,8 +433,9 @@ function getContext(args, prefix, content) {
 
 async function acceptedRules(main, msg) {
 	if (!msg.author.acceptedRules) {
-		let sql = `SELECT rules.* FROM rules INNER JOIN user ON user.uid = rules.uid WHERE id = ${msg.author.id};`;
-		let result = await main.mysqlhandler.query(sql);
+		// Parameterized: the id never gets concatenated into the statement
+		let sql = 'SELECT rules.* FROM rules INNER JOIN user ON user.uid = rules.uid WHERE id = ?;';
+		let result = await main.mysqlhandler.query(sql, [msg.author.id]);
 		msg.author.acceptedRules = !!result[0];
 	}
 	return msg.author.acceptedRules;

@@ -6,7 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
-const config = require('../../../data/config.json');
+const config = require('../../../utils/config.js');
 
 const emoji = '<a:rain:975313415637708840>';
 const owners = ['578335497793961993'];

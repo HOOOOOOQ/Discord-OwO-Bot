@@ -25,9 +25,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Use autohunt to hunt for animals automatically! Upgrade huntbot for more efficient hunts!',
 
-	example: ['owo autohunt', 'owo autohunt 1000', 'owo autohunt 10h'],
+	example: ['o autohunt', 'o autohunt 1000', 'o autohunt 10h'],
 
-	related: ['owo sacrifice', 'owo upgrade'],
+	related: ['o sacrifice', 'o upgrade'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 
@@ -240,7 +240,7 @@ async function autohunt(p, msg, con, args, global, send) {
 			bot +
 			' | ' +
 			p.getName() +
-			'**, Here is your password!\n**<:blank:427371936482328596> |** Use the command `owo autohunt ' +
+			'**, Here is your password!\n**<:blank:427371936482328596> |** Use the command `o autohunt ' +
 			cowoncy +
 			' {password}`';
 		text = alterhb(msg.author.id, text, 'password');
@@ -253,7 +253,7 @@ async function autohunt(p, msg, con, args, global, send) {
 			send(
 				'**🚫 | ' +
 					p.getName() +
-					'**, Please include your password! The command is `owo autohunt ' +
+					'**, Please include your password! The command is `o autohunt ' +
 					cowoncy +
 					' {password}`!\n**<:blank:427371936482328596> |** Password will reset in ' +
 					(10 - result[0][0].pwtime) +
@@ -263,7 +263,7 @@ async function autohunt(p, msg, con, args, global, send) {
 			send(
 				'**🚫 | ' +
 					p.getName() +
-					'**, Wrong password! The command is `owo autohunt ' +
+					'**, Wrong password! The command is `o autohunt ' +
 					cowoncy +
 					' {password}`!\n**<:blank:427371936482328596> |** Password will reset in ' +
 					(10 - result[0][0].pwtime) +
@@ -411,7 +411,7 @@ async function display(p, msg, con) {
 			{
 				name: `\`BEEP. BOOP. I AM HUNTBOT. I WILL HUNT FOR YOU MASTER.\``,
 				value:
-					'Use the command `owo autohunt {cowoncy}` to get started.\nYou can use `owo upgrade {trait} {count}` to upgrade the traits below.\nTo obtain more essence, use `owo sacrifice {animal} {count}`.\n\n',
+					'Use the command `o autohunt {cowoncy}` to get started.\nYou can use `o upgrade {trait} {count}` to upgrade the traits below.\nTo obtain more essence, use `o sacrifice {animal} {count}`.\n\n',
 				inline: false,
 			},
 			{

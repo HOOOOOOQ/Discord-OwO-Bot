@@ -99,7 +99,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Send someone a Truth or Dare!  Including an optional @mention for a direct truth/dare or no @mention.  Specifying either a truth or dare, or no type for either a truth or dare at random\n\nThis command was created by ?442112392868921365?!',
 
-	example: ['owo truthordare truth @user'],
+	example: ['o truthordare truth @user'],
 
 	related: [],
 

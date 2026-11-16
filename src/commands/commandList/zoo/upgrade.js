@@ -31,9 +31,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Use animal essence to upgrade autohunt!\nYou can specify an amount, upgrade to the next level, or use all your essence.',
 
-	example: ['owo upgrade efficiency 200', 'owo upgrade cost level', 'owo upgrade duration all'],
+	example: ['o upgrade efficiency 200', 'o upgrade cost level', 'o upgrade duration all'],
 
-	related: ['owo autohunt', 'owo sacrifice'],
+	related: ['o autohunt', 'o sacrifice'],
 
 	permissions: ['sendMessages'],
 

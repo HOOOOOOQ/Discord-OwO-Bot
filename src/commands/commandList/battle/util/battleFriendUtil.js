@@ -205,12 +205,12 @@ function toEmbedRequest(p, stats, bet, sender, receiver, flags) {
 	}
 	if (flagText != '') flagText = '\nFlags: ' + flagText;
 
-	let acceptText = '\n`owo ab` to accept the battle!';
+	let acceptText = '\n`o ab` to accept the battle!';
 	if (bet > 0) {
 		acceptText =
-			'\n`owo ab ' +
+			'\n`o ab ' +
 			bet +
-			'` to accept the battle with the bet!\n`owo ab` to accept the battle without the bet!';
+			'` to accept the battle with the bet!\n`o ab` to accept the battle without the bet!';
 	}
 
 	let embed = {
@@ -218,7 +218,7 @@ function toEmbedRequest(p, stats, bet, sender, receiver, flags) {
 			name: `${receiver.username}, ${sender.username} challenges you to a duel!`,
 			icon_url: p.msg.author.avatarURL,
 		},
-		description: flagText + acceptText + '\n`owo db` to decline the battle!',
+		description: flagText + acceptText + '\n`o db` to decline the battle!',
 		color: p.config.embed_color,
 		footer: {
 			text: 'This challenge will expire in 10 minutes',

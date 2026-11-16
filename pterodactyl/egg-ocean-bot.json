@@ -1,0 +1,60 @@
+{
+	"_comment": "OCEAN Bot (Discord) — Node.js 20 + library native canvas. WAJIB pakai image dari pterodactyl/Dockerfile (ganti ghcr.io/USER/ocean-bot:node20). Lihat PTERODACTYL.md.",
+	"meta": {
+		"version": "PTDL_v2",
+		"update_url": null
+	},
+	"name": "OCEAN Bot",
+	"description": "Discord bot (fork OwO Bot): animals, economy, battles. Butuh MariaDB/MySQL dan Redis yang bisa diakses dari container. Prefix default: o.",
+	"features": null,
+	"docker_images": {
+		"Node.js 20 + canvas": "ghcr.io/USER/ocean-bot:node20"
+	},
+	"file_denylist": [],
+	"startup": "node index.js",
+	"config": {
+		"files": "{}",
+		"startup": "{\"done\": \"bot ready\"}",
+		"logs": "{}",
+		"stop": "^C"
+	},
+	"scripts": {
+		"installation": {
+			"script": "#!/bin/ash\nset -e\n\ncd /mnt/server\n\necho \"== OCEAN Bot installer ==\"\n\nif [ ! -f package.json ]; then\n  echo \"package.json tidak ditemukan di /mnt/server.\"\n  echo \"Upload dulu source code bot lewat SFTP / File Manager, lalu tekan Reinstall.\"\n  exit 1\nfi\n\nmkdir -p secret\n\necho \"== npm ci (beberapa menit: canvas dikompilasi dari source) ==\"\nnpm ci --omit=dev --no-audit --no-fund\n\necho \"== selesai ==\"\necho \"Langkah berikutnya:\"\necho \" 1. Isi .env: BOT_TOKEN, OWNER_IDS, MYSQL_HOST/USER/PASS/DATABASE, REDIS_HOST/PASS\"\necho \" 2. Import secret/CREATE-OWO-TABLES.sql ke database\"\necho \" 3. Start server\"\n",
+			"container": "ghcr.io/USER/ocean-bot:node20",
+			"entrypoint": "ash"
+		}
+	},
+	"variables": [
+		{
+			"name": "Clusters",
+			"description": "Jumlah proses cluster bot. 1-2 cukup untuk bot kecil; tiap proses makan ~200-350 MB RAM. Jangan pakai default 60 di panel kecil (OOM).",
+			"env_variable": "CLUSTERS",
+			"default_value": "2",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|integer|between:1,200",
+			"field_type": "text"
+		},
+		{
+			"name": "Prefix",
+			"description": "Prefix default bot (huruf kecil). Bisa diubah per server dengan `o prefix <baru>`.",
+			"env_variable": "PREFIX",
+			"default_value": "o",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|string|max:25",
+			"field_type": "text"
+		},
+		{
+			"name": "Owner IDs",
+			"description": "Opsional. ID Discord owner, dipisah koma. Kosong = command owner (termasuk eval) mati untuk semua orang.",
+			"env_variable": "OWNER_IDS",
+			"default_value": "",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "nullable|string",
+			"field_type": "text"
+		}
+	]
+}

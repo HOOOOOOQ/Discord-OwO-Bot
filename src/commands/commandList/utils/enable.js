@@ -17,9 +17,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Enable a command or a command group in the current channel',
 
-	example: ['owo enable hunt', 'owo enable all'],
+	example: ['o enable hunt', 'o enable all'],
 
-	related: ['owo disable'],
+	related: ['o disable'],
 
 	permissions: ['sendMessages'],
 

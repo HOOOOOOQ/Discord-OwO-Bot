@@ -20,7 +20,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Pick one PikPik carrot. Each day you can only do this command one more time than the amount of times you did it the day before. This command was created by ?245103025805328384?',
 
-	example: ['owo piku', 'owo piku farmer'],
+	example: ['o piku', 'o piku farmer'],
 
 	related: [],
 

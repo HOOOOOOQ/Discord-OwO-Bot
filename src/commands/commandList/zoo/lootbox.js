@@ -21,11 +21,11 @@ module.exports = new CommandInterface({
 
 	args: '{count}|fabled',
 
-	desc: "Opens a lootbox! Check how many you have in 'owo inv'!\nYou can get some more by hunting for animals. You can get a maximum of 3 lootboxes per day.\nYou can use the items by using 'owo use {id}'",
+	desc: "Opens a lootbox! Check how many you have in 'o inv'!\nYou can get some more by hunting for animals. You can get a maximum of 3 lootboxes per day.\nYou can use the items by using 'o use {id}'",
 
-	example: ['owo lb', 'owo lb 10', 'owo lb fabled'],
+	example: ['o lb', 'o lb 10', 'o lb fabled'],
 
-	related: ['owo inv', 'owo hunt'],
+	related: ['o inv', 'o hunt'],
 
 	permissions: ['sendMessages'],
 

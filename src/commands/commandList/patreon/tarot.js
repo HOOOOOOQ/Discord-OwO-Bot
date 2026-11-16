@@ -77,7 +77,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Ask a question and answer them with tarot cards! This command was created by ?250383887312748545?',
 
-	example: ['owo tarot 3 should I call my grandma?'],
+	example: ['o tarot 3 should I call my grandma?'],
 
 	related: [],
 

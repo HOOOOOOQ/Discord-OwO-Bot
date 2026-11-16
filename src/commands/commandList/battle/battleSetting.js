@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	example: [''],
 
-	related: ['owo battle'],
+	related: ['o battle'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 
@@ -59,7 +59,7 @@ async function changeSettings(p) {
 	args = args.toLowerCase();
 	args = args.split('=');
 	if (args.length != 2) {
-		p.errorMsg(', The correct command is `owo battlesetting {settingName=setting}`');
+		p.errorMsg(', The correct command is `o battlesetting {settingName=setting}`');
 		return;
 	}
 

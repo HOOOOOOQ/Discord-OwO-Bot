@@ -8,7 +8,7 @@
 const CommandInterface = require('../../CommandInterface.js');
 
 const fs = require('fs');
-const request = require('request');
+const request = require('../../../utils/http.js');
 const { createCanvas, Image } = require('canvas');
 const textBoxHeight = 100;
 
@@ -19,7 +19,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Creates a *slaps roof of car* meme! You can also tag a user after your text to use their image instead',
 
-	example: ['owo slapcar This badboy can fit so much coffee @Scuttler', 'owo slapcar I slap cars'],
+	example: ['o slapcar This badboy can fit so much coffee @Scuttler', 'o slapcar I slap cars'],
 
 	related: [],
 

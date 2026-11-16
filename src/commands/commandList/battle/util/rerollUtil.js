@@ -66,7 +66,7 @@ function parseArgs(p) {
 		uwid = p.args[1];
 	} else {
 		p.errorMsg(
-			', invalid syntax! Please use the format: `owo w rr {weaponID} [passive|stat]`!',
+			', invalid syntax! Please use the format: `o w rr {weaponID} [passive|stat]`!',
 			5000
 		);
 		return;
@@ -76,7 +76,7 @@ function parseArgs(p) {
 	uwid = weaponUtil.expandUWID(uwid);
 	if (!uwid) {
 		p.errorMsg(
-			', invalid syntax! Please use the format: `owo w rr {weaponID} [passive|stat]`!',
+			', invalid syntax! Please use the format: `o w rr {weaponID} [passive|stat]`!',
 			5000
 		);
 		return;
@@ -90,7 +90,7 @@ async function getWeapon(p, uwid) {
 	/* If no weapon */
 	if (!weapon) {
 		p.errorMsg(
-			', I could not find a weapon with that unique weapon id! Please use `owo weapon` for the weapon ID!',
+			', I could not find a weapon with that unique weapon id! Please use `o weapon` for the weapon ID!',
 			4000
 		);
 		return;

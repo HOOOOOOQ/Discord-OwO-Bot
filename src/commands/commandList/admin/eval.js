@@ -6,6 +6,8 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const sandbox = require('../../../utils/sandbox.js');
+const auth = require('../../../utils/auth.js');
 
 module.exports = new CommandInterface({
 	alias: ['eval'],
@@ -13,19 +15,28 @@ module.exports = new CommandInterface({
 	owner: true,
 
 	execute: async function () {
+		if (!sandbox.isEnabled()) {
+			this.errorMsg(', eval is disabled on this instance (ALLOW_EVAL is not set).', 4000);
+			return;
+		}
+		if (!auth.isOwner(this.msg.author.id)) {
+			this.errorMsg(', only the configured owner may use eval.', 4000);
+			return;
+		}
+
 		const js = this.context.replace(/^```\w*/gi, '').replace(/```$/gi, '');
 		let result;
 		try {
-			result = evalInContext(js, this);
+			result = sandbox.run(js, this);
 		} catch (err) {
 			result = err;
 		}
-		this.send(`\`\`\`js\n${result}\n\`\`\``);
+
+		// Output is redacted and length capped before it ever reaches Discord
+		auth.audit('eval', this.msg, {
+			command: 'eval',
+			result: result instanceof Error ? 'error' : 'ok',
+		});
+		this.send(sandbox.formatResult(result));
 	},
 });
-
-function evalInContext(js, context) {
-	return function () {
-		return eval(js);
-	}.call(context);
-}

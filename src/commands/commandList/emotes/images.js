@@ -14,11 +14,11 @@ module.exports = new CommandInterface({
 
 	args: '{type}',
 
-	desc: "Grabs a gif/pic with the given type. To list all the types, type 'owo gif'. Some listed types may not work",
+	desc: "Grabs a gif/pic with the given type. To list all the types, type 'o gif'. Some listed types may not work",
 
-	example: ['owo pic neko', 'owo gif neko'],
+	example: ['o pic neko', 'o gif neko'],
 
-	related: ['owo gif', 'owo pic'],
+	related: ['o gif', 'o pic'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 
@@ -46,7 +46,7 @@ module.exports = new CommandInterface({
 				p.send('**🚫 |** nsfw channels only! >:c', 3000);
 				return;
 			} else if (p.command == 'gif') {
-				p.send('**🚫 |** Sorry! I only have pics of nsfw! Please use `owo pic nsfw`', 3000);
+				p.send('**🚫 |** Sorry! I only have pics of nsfw! Please use `o pic nsfw`', 3000);
 				return;
 			}
 			nsfw = true;

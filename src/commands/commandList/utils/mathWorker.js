@@ -37,7 +37,13 @@ function compute(expression) {
 	return limitedEvaluate(expression);
 }
 
-// Not a child process if registering app commands, it will fail
-if (!process.env.REGITER_COMMANDS) {
+// This file is auto-loaded by the command loader as well, so it must only
+// install the workerpool message handler when it is actually running as the
+// worker process. Otherwise requiring it inside a shard hijacks the cluster IPC
+// channel and can break sharder communication.
+// REGITER_COMMANDS is the historical (misspelled) flag kept for compatibility.
+const isWorkerProcess =
+	require.main === module || /mathWorker\.js$/.test(String(process.argv[1] || ''));
+if (isWorkerProcess && !process.env.REGISTER_COMMANDS && !process.env.REGITER_COMMANDS) {
 	workerpool.worker({ compute: compute });
 }

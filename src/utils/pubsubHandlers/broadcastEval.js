@@ -5,22 +5,34 @@
  * For more information, see README.md and LICENSE
  */
 
+const sandbox = require('../sandbox.js');
+const log = require('../log.js');
+
 exports.handle = async function (main, message) {
-	const { js, channel } = JSON.parse(message);
+	if (!sandbox.isEnabled()) {
+		log.warn('broadcastEval ignored: ALLOW_EVAL is not enabled on this instance');
+		return;
+	}
+	let payload;
+	try {
+		payload = JSON.parse(message);
+	} catch (err) {
+		log.warn('broadcastEval ignored: malformed payload');
+		return;
+	}
+	const { js, channel } = payload || {};
+	if (!js || !channel) return;
 	const shardId = main.bot.shards.values().next().value.id;
 	setTimeout(() => {
 		let result;
 		try {
-			result = evalInContext(js, main);
+			result = sandbox.run(js, main);
 		} catch (err) {
 			result = err;
 		}
-		main.bot.createMessage(channel, `\`\`\`js\n${result}\n\`\`\``);
+		// Redacted and capped by the sandbox formatter
+		main.bot.createMessage(channel, sandbox.formatResult(result)).catch((err) => {
+			log.warn('broadcastEval could not deliver its output:', err.message);
+		});
 	}, shardId * 500);
 };
-
-function evalInContext(js, context) {
-	return function () {
-		return eval(js);
-	}.call(context);
-}

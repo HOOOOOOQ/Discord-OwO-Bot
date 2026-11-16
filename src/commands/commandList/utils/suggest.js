@@ -7,7 +7,7 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 const ban = require('../../../utils/ban.js');
-const config = require('../../../data/config.json');
+const config = require('../../../utils/config.js');
 
 const feedbackChannel = '519778148888346635';
 const supportGuild = '420104212895105044';
@@ -23,7 +23,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Suggest a new feature. You must be in our support server to suggest.\n' + config.guildlink,
 
-	example: ['owo suggest Add a new type of gamble!'],
+	example: ['o suggest Add a new type of gamble!'],
 
 	related: [],
 

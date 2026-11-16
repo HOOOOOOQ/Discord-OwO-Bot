@@ -7,10 +7,16 @@
 
 const CommandInterface = require('../../CommandInterface.js');
 
-const request = require('request');
+const request = require('../../../utils/http.js');
+const log = require('../../../utils/log.js');
+
 let cases = {};
-fetchCases();
-setInterval(fetchCases, 1800000);
+// Only poll when the upstream endpoint is configured. Requiring this module
+// used to fire a request against "undefined/covid" at load time.
+if (process.env.SHARDER_HOST) {
+	fetchCases();
+	setInterval(fetchCases, 1800000).unref();
+}
 
 module.exports = new CommandInterface({
 	alias: ['covid', 'cv', 'covid19', 'coronavirus'],
@@ -19,7 +25,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Shows the current coronavirus cases. You can specify a country in the arguments. Stay safe out there and please remember to wash your hands. The information is pulled from this github https://www.worldometers.info/coronavirus/',
 
-	example: ['owo covid', 'owo coronavirus usa'],
+	example: ['o covid', 'o coronavirus usa'],
 
 	related: [],
 
@@ -165,13 +171,14 @@ async function fetchCases() {
 		{
 			method: 'GET',
 			uri: process.env.SHARDER_HOST + '/covid',
+			json: true,
 		},
 		(error, res, body) => {
 			if (error) {
-				console.error(error);
+				log.warn('covid: could not refresh case data:', error.message);
 				return;
 			}
-			cases = JSON.parse(body);
+			if (body && typeof body === 'object') cases = body;
 		}
 	);
 }

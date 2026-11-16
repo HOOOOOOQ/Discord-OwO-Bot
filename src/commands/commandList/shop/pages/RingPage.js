@@ -34,7 +34,7 @@ module.exports = class RingPage extends PageClass {
 		}
 
 		embed.description =
-			'Purchase a ring to propose to someone!\nAll rings are the same. Different tiers are available to show off your love!\n- **`owo buy {id}`** to buy an item\n- **`owo sell {id}`** to sell an item for 75% of its original price\n- **`owo marry @user {id}`** to use the ring\n' +
+			'Purchase a ring to propose to someone!\nAll rings are the same. Different tiers are available to show off your love!\n- **`o buy {id}`** to buy an item\n- **`o sell {id}`** to sell an item for 75% of its original price\n- **`o marry @user {id}`** to use the ring\n' +
 			'═'.repeat(this.charLen + 2) +
 			'\n' +
 			result;
