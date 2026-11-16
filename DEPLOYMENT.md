@@ -86,6 +86,10 @@ sockets close, then the process exits. An `uncaughtException` is logged with
 context, the same shutdown runs, and the process exits with code 1 so the
 supervisor/sharder respawns a clean process (`EXIT_ON_FATAL=false` opts out).
 
+> Pterodactyl 1.x: ada panduan khusus + egg siap import di
+> [PTERODACTYL.md](PTERODACTYL.md) (image `pterodactyl/Dockerfile`, karena
+> image `nodejs_20` bawaan tidak punya library `canvas`).
+
 ## 4. Docker
 
 ```bash

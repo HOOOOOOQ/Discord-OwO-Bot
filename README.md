@@ -37,7 +37,8 @@ Docker (bot + MariaDB + Redis) is available but optional:
 cp .env.example .env && docker compose up -d --build
 ```
 
-Full instructions: [DEPLOYMENT.md](DEPLOYMENT.md). Security posture and residual
+Full instructions: [DEPLOYMENT.md](DEPLOYMENT.md). Pterodactyl panel:
+[PTERODACTYL.md](PTERODACTYL.md) (image + egg siap import). Security posture and residual
 risks: [SECURITY.md](SECURITY.md). Tests: [TESTING.md](TESTING.md). Repair log
 with root causes and verification: [FIXLOG.md](FIXLOG.md). Architecture and
 remaining technical debt: [ANALISIS.md](ANALISIS.md).

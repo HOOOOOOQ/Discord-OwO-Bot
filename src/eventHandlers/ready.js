@@ -6,6 +6,11 @@
  */
 
 // Fired when all shards turn ready
+const log = require('../utils/log.js');
+
 exports.handle = function () {
 	this.logger.logstashQos('ready');
+	// Readiness marker: readers (Docker healthcheck, Pterodactyl startup
+	// detection) look for this line to know the bot is actually connected.
+	log.info('bot ready: all shards connected');
 };
