@@ -5,6 +5,8 @@
  * For more information, see README.md and LICENSE
  */
 
+const nativeCanvas = require('../utils/nativeCanvas.js');
+
 module.exports = class CommandInterface {
 	constructor(args) {
 		for (let key in args) {
@@ -17,6 +19,16 @@ module.exports = class CommandInterface {
 	}
 
 	async execute(params) {
+		// Meme generation renders images with the optional native `canvas` module.
+		// When the host could not build it, answer instead of throwing.
+		if (this.group && this.group.includes('memegeneration') && !nativeCanvas.isAvailable()) {
+			params.errorMsg(
+				', this command needs the optional `canvas` module (cairo/pango), which is not available on this server!',
+				4000
+			);
+			return;
+		}
+
 		// Check if the bot has the correct perms first
 		if (params.msg.channel.type === 0 && this.permissions) {
 			let channel = params.msg.channel;

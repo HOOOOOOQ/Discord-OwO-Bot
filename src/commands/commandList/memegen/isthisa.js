@@ -9,7 +9,21 @@ const CommandInterface = require('../../CommandInterface.js');
 
 const fs = require('fs');
 const request = require('../../../utils/http.js').defaults({ encoding: null });
-const { Canvas, Image } = require('canvas');
+const nativeCanvas = require('../../../utils/nativeCanvas.js');
+
+function canvasModules() {
+	const lib = nativeCanvas.load();
+	if (!lib) throw new Error('canvas module is not available');
+	return lib;
+}
+// Constructor-compatible helpers: the call sites below use `new Image()` /
+// `new Canvas(w, h)` / `createCanvas(w, h)` unchanged.
+function Image() {
+	return new (canvasModules().Image)();
+}
+function Canvas(width, height) {
+	return canvasModules().createCanvas(width, height);
+}
 
 module.exports = new CommandInterface({
 	alias: ['isthisa'],
