@@ -37,6 +37,23 @@ owo battle @user
 s! daily            (kalau server memakai prefix "s!")
 ```
 
+### Prefix pendek (contoh nyata `w`)
+
+Banyak server memakai prefix satu huruf, misalnya `w`, lalu memakai **alias**
+command-nya. Karena prefix dan alias digabung tanpa spasi, hasilnya terlihat
+seperti "command baru" padahal bukan:
+
+| Yang diketik | Diurai menjadi | Command asli                                                                  |
+| ------------ | -------------- | ----------------------------------------------------------------------------- |
+| `wb`         | `w` + `b`      | `battle` (alias `battle`, `b`, `fight`)                                       |
+| `ws 100000`  | `w` + `s`      | `slots` (alias `slots`, `slot`, `s`)                                          |
+| `wh`         | `w` + `h`      | `hunt` (alias `hunt`, `h`, `catch` → `zoo/catch`)                             |
+| `wcash`      | `w` + `cash`   | `cowoncy` (alias `cowoncy`, `money`, `currency`, `cash`, `credit`, `balance`) |
+
+Tidak ada command terpisah bernama `ws`, `wh`, atau `wcash`; semuanya adalah
+prefix + alias. Kalau server memakai prefix default, bentuk lengkapnya
+`owo slots 100000`, `owo hunt`, dan `owo cash`.
+
 Catatan:
 
 - Pesan yang hanya berisi `owo` atau `uwu` (tanpa command) dijawab oleh command
