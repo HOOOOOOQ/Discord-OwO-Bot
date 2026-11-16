@@ -12,7 +12,9 @@ class InfoUpdater {
 	constructor(main) {
 		this.main = main;
 		this.totalShards = false;
-		if (!main.debug) {
+		// Everything here talks to upstream OwO's private sharder server. Skip it
+		// when the bot is self-hosted without one.
+		if (!main.debug && process.env.SHARDER_HOST) {
 			setInterval(() => {
 				this.updateBotInfo();
 			}, interval);

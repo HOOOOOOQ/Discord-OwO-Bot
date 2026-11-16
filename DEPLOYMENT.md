@@ -8,7 +8,7 @@
 | MariaDB / MySQL   | 10.6+ / 8.0+                                                                            | schema in `secret/CREATE-OWO-TABLES.sql` (87 tables) |
 | Redis             | 6+                                                                                      | cooldowns, XP, prefixes, pub/sub                     |
 | Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | optional: hanya untuk `canvas` (memegen)             |
-| Internal services | `SHARDER_HOST`, image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh  | required by the sharder and image commands           |
+| Internal services | image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh                  | `SHARDER_HOST` is optional (see §3)                  |
 
 ## 1. Configuration
 
@@ -35,7 +35,22 @@ is **no MongoDB** in this project; the database is MySQL/MariaDB.
 
 There is **no default owner**. If `OWNER_IDS` is empty the bot logs a warning and
 every owner-only command (including `eval`) is denied. `DEBUG` defaults to
-`false`; while enabled the bot only answers in `DEBUG_WHITELIST` guilds.
+`false`; while enabled the bot only answers in `DEBUG_WHITELIST` guilds — and if
+the whitelist is empty the bot ignores _every_ guild, which looks exactly like
+"the bot is dead".
+
+`MESSAGE CONTENT INTENT` is privileged and must be enabled in the Discord
+Developer Portal (Bot → Privileged Gateway Intents) or the bot will connect and
+ignore every command. `ERIS_MESSAGE_CONTENT` controls how the bot treats it:
+`auto` (default, request it only when the portal allows), `on`, `off`. To pin the
+whole intent bitmask use `ERIS_INTENTS` (names or numbers, e.g.
+`allNonPrivileged,messageContent`).
+
+Run the self-check at any time:
+
+```bash
+node index.js --doctor    # token, intents, shard source, DATABASE_URL/REDIS_URL reachability
+```
 
 `PREFIX` sets the bot-wide default prefix and defaults to `o` (the bot is called
 **OCEAN**; `sharder.name` in `src/data/config.json` and the `< OCEAN … >` help
@@ -83,9 +98,25 @@ npm run verify:commands
 node index.js
 ```
 
-The master process asks `SHARDER_HOST` for its shard range and then forks
-`CLUSTERS` (default 60, override with `CLUSTERS`) cluster processes. In debug
+The master process resolves its shard range and then forks `CLUSTERS` cluster
+processes (override `CLUSTERS`; the repo default of 60 is meant for the public
+bot, 1–2 is right for a small server). Shards come from `SHARDS`/`SHARD_FIRST`/
+`SHARD_LAST`, else `SHARDER_HOST` when that (upstream-private) service exists,
+else Discord's `GET /gateway/bot` recommendation, else a single shard. In debug
 mode a single shard/cluster is started.
+
+Startup logs tell you what was decided:
+
+```
+discord: token ok — Ocean#5352 (id 1571…)
+discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
+shard config: shards 0~0 of 1 (Discord's recommendation)
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0
+```
+
+If the token is rejected, the intent is disabled, or a shard disconnects, the
+log now says so explicitly (e.g. `4004` = bad token, `4014` = disallowed intent)
+instead of leaving a process that looks alive but never comes online.
 
 ### Signals
 

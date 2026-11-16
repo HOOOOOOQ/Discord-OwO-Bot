@@ -27,6 +27,21 @@ if (process.argv.includes('--verify')) {
 	process.exit(ok ? 0 : 1);
 }
 
+// `node index.js --doctor` prints a read-only self-check (token, privileged
+// intents, shard source, DATABASE_URL/REDIS_URL reachability) and exits. It
+// never starts a shard, so it is safe to run on a live panel.
+if (process.argv.includes('--doctor')) {
+	require('./src/utils/doctor.js')
+		.run()
+		.then((ok) => process.exit(ok ? 0 : 1))
+		.catch((err) => {
+			// eslint-disable-next-line no-console
+			console.error('doctor failed:', err);
+			process.exit(1);
+		});
+	return;
+}
+
 // Config file (environment overrides applied inside the loader)
 const config = require('./src/utils/config.js');
 const log = require('./src/utils/log.js');
@@ -43,59 +58,57 @@ const debug = config.debug;
 if (!debug) require('dd-trace').init();
 
 const rateLimitUtil = require('./utils/rateLimitUtil.js');
-const request = require('./utils/request.js');
 // Eris-Sharder
 const Sharder = require('eris-sharder').Master;
-var result, shards, firstShardID, lastShardID;
 const cluster = require('cluster');
+const { resolveShardConfig, describe: describeShardConfig } = require('./src/utils/shardConfig.js');
+const diagnostics = require('./src/utils/diagnostics.js');
 
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 2000;
+var shards, firstShardID, lastShardID;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchInitWithRetry() {
-	let lastError;
-	for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
-		try {
-			return await request.fetchInit();
-		} catch (err) {
-			lastError = err;
-			log.warn(
-				`Could not reach the sharder server (attempt ${attempt}/${RETRY_ATTEMPTS}): ${
-					err?.message || err
-				}`
-			);
-			if (attempt < RETRY_ATTEMPTS) await sleep(RETRY_DELAY_MS * attempt);
-		}
-	}
-	throw lastError;
-}
+// The sharder server of upstream OwO does not exist for self-hosters. Shards now
+// come from SHARDS/SHARD_FIRST/SHARD_LAST, or SHARDER_HOST when configured, or
+// Discord's recommendation — see src/utils/shardConfig.js.
 
 (async () => {
 	try {
-		//determine how many shards we will need for this manager
-		if (!debug && cluster.isMaster) {
-			result = await fetchInitWithRetry();
-			log.info('Sharder server response:', result);
-			shards = parseInt(result['shards']);
-			firstShardID = parseInt(result['firstShardID']);
-			lastShardID = parseInt(result['lastShardID']);
-		}
-		if (debug) {
-			shards = 1;
-			firstShardID = 0;
-			lastShardID = 0;
-			config.clusters = 1;
+		// Worker clusters receive their shard range over IPC from the master, so
+		// they must not require any shard configuration of their own. (They used
+		// to throw here and never connect, which left the bot offline while the
+		// master process stayed alive.)
+		if (cluster.isMaster) {
+			if (debug) {
+				shards = 1;
+				firstShardID = 0;
+				lastShardID = 0;
+				config.clusters = 1;
+				log.info('shard config: DEBUG mode forces a single shard (0~0 of 1)');
+			} else {
+				const resolved = await resolveShardConfig({ token: process.env.BOT_TOKEN });
+				shards = resolved.shards;
+				firstShardID = resolved.firstShardID;
+				lastShardID = resolved.lastShardID;
+				if (config.clusters > shards) config.clusters = shards;
+				log.info('shard config: ' + describeShardConfig(resolved));
+			}
+
+			// Token + privileged-intent check. A disabled MESSAGE CONTENT INTENT used
+			// to leave the bot online but deaf; requesting it while disabled makes
+			// Discord close the gateway with 4014. This keeps the two in sync.
+			await diagnostics.check({ config });
 		}
 
-		if (!Number.isInteger(firstShardID) || !Number.isInteger(lastShardID) || !shards) {
-			throw new Error('Sharder server returned an invalid shard configuration');
+		if (cluster.isMaster) {
+			log.info(
+				'Creating shards ' +
+					firstShardID +
+					'~' +
+					lastShardID +
+					' out of ' +
+					shards +
+					' total shards!'
+			);
 		}
-
-		log.info(
-			'Creating shards ' + firstShardID + '~' + lastShardID + ' out of ' + shards + ' total shards!'
-		);
 
 		// Start sharder
 		const sharder = new Sharder('Bot ' + process.env.BOT_TOKEN, config.sharder.path, {

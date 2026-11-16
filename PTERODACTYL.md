@@ -219,8 +219,17 @@ o cash          → saldo cowoncy (butuh tabel ter-import)
 o grant @user 1000   → hanya untuk owner / COWONCY_ADMIN_IDS
 ```
 
-Kalau `bot ready` tidak muncul tapi proses hidup: token salah, atau bot belum
-di-invite ke guild mana pun.
+Kalau `bot ready` tidak muncul tapi proses hidup, jalankan self-check:
+
+```
+node index.js --doctor
+```
+
+(ubah sementara _Startup Command_ server menjadi `node index.js --doctor`, klik
+Start, lalu kembalikan ke `node index.js`). Output-nya menunjukkan token valid
+atau tidak, MESSAGE CONTENT INTENT nyala atau tidak, sumber jumlah shard, serta
+apakah `DATABASE_URL`/`REDIS_URL` bisa dijangkau. Lihat bagian 9c kalau bot
+terlihat offline atau command tidak dijawab.
 
 ---
 
@@ -256,6 +265,79 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 | `EACCES` saat menulis `secret/`                           | File ter-upload sebagai owner yang salah; lewat File Manager/SFTP panel (user `container`).                                                                                                       |
 
 ---
+
+## 9c. Bot terlihat offline / command diabaikan
+
+Dua penyebab tersering, keduanya sekarang dilaporkan di console:
+
+**1. MESSAGE CONTENT INTENT belum nyala.** Bot connect dan tampak online, tapi
+Discord mengirim `content` kosong, jadi `o help`, `o daily`, dan command lain
+tidak pernah cocok. Sejak versi ini bot meminta intent itu **hanya kalau portal
+mengizinkan** (kalau dipaksa saat portal mati, Discord menutup gateway dengan
+4014 dan bot justru terlihat offline).
+
+Perbaikan: Developer Portal → aplikasi kamu → **Bot** → _Privileged Gateway
+Intents_ → **MESSAGE CONTENT INTENT** ON → Save → Restart server.
+
+Console akan menunjukkan:
+
+```
+discord: application OCEAN (id 1571...); MESSAGE CONTENT INTENT DISABLED
+discord: MESSAGE CONTENT INTENT is DISABLED for this application — ...
+```
+
+**2. Token salah / sudah di-reset.** Log-nya:
+
+```
+discord: BOT_TOKEN was rejected (HTTP 401) ...
+```
+
+atau saat shard gagal connect:
+
+```
+[shard 0] disconnected: 4004 — authentication failed — BOT_TOKEN is invalid ...
+```
+
+Salin token baru dari Developer Portal ke `BOT_TOKEN`.
+
+**3. `DEBUG=true` tanpa `DEBUG_WHITELIST` yang benar.** Debug mode membuat bot
+hanya menjawab guild yang ada di whitelist:
+
+```
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0
+bot ready: DEBUG mode is on — only DEBUG_WHITELIST guilds are answered
+```
+
+Isi `DEBUG_WHITELIST` dengan **ID guild** (Developer Mode → klik kanan server →
+Copy Server ID), atau hapus `DEBUG` setelah sharding normal.
+
+**4. Belum di-invite.** `bot ready: ... in 0 guild(s)` berarti bot tidak berada
+di server mana pun; invite lewat
+`https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot&permissions=8`.
+
+Kalau butuh semua jawaban sekaligus, jalankan `node index.js --doctor`.
+
+## 9d. Sharding tanpa server sharder
+
+`SHARDER_HOST` adalah service privat milik OwO upstream dan **tidak
+dipublikasikan** — instalasi mandiri tidak perlu (dan tidak bisa) memakainya.
+Urutan penentuan jumlah shard sekarang:
+
+1. `SHARDS` / `SHARD_FIRST` / `SHARD_LAST` (kalau diisi),
+2. `SHARDER_HOST` (kalau kamu benar-benar punya service-nya),
+3. rekomendasi Discord dari `GET /gateway/bot`,
+4. 1 shard kalau Discord tidak bisa dihubungi.
+
+Log-nya menyebut sumbernya:
+
+```
+shard config: shards 0~0 of 1 (Discord's recommendation)
+Creating shards 0~0 out of 1 total shards!
+```
+
+Command `o stats` dan `o shards` juga tetap jalan tanpa sharder server (dihitung
+dari proses ini), dan `InfoUpdater`/`updateShardInfo` tidak lagi memanggil
+endpoint yang tidak ada.
 
 ## 9b. canvas opsional — bot jalan tanpa memegen
 

@@ -35,7 +35,21 @@ module.exports = new CommandInterface({
 	execute: async function (p) {
 		let shardID = p.client.guildShardMap[p.msg.channel.guild.id];
 
-		let shardInfo = await fetchInfo(p);
+		// Self-hosted: build the table from this process instead of the sharder server.
+		let shardInfo = process.env.SHARDER_HOST ? await fetchInfo(p).catch(() => null) : null;
+		if (!shardInfo) {
+			shardInfo = {};
+			p.client.shards.forEach((shard) => {
+				shardInfo[shard.id] = {
+					shard: shard.id,
+					cluster: 0,
+					ping: shard.latency,
+					start: p.client.uptime,
+					status: shard.status,
+					updatedOn: new Date(),
+				};
+			});
+		}
 		let shards = [];
 		// char size: 5 4 13 4 6 8 5
 		for (let i in shardInfo) {
@@ -138,6 +152,7 @@ function getPage(p, currentPage, shards, _shardID) {
 }
 
 async function fetchInfo(p) {
+	if (!process.env.SHARDER_HOST) throw new Error('SHARDER_HOST is not configured');
 	p.pubsub.publish('updateShardInfo');
 
 	return new Promise((resolve, reject) => {

@@ -16,6 +16,7 @@
  */
 
 const log = require('./log.js');
+const { resolveIntents } = require('./intents.js');
 // Pristine committed defaults. Never mutated, so repeated loads (tests, cluster
 // respawns) always start from the same baseline.
 const defaults = require('../data/config.json');
@@ -77,6 +78,28 @@ const config = {
 	giveawayChannels: [],
 	owners: [],
 };
+
+// ---- Eris client options / gateway intents --------------------------------
+// Cloned so mutating them here never touches the required JSON module.
+config.eris = {
+	...(defaults.eris || {}),
+	clientOptions: {
+		...((defaults.eris && defaults.eris.clientOptions) || {}),
+	},
+};
+// Upstream shipped no `intents` at all, so eris used allNonPrivileged and the
+// bot never saw message text (every command silently ignored). MESSAGE_CONTENT
+// is requested here unless ERIS_MESSAGE_CONTENT=off or the startup diagnostics
+// detect that the portal toggle is disabled.
+config.eris.intents = resolveIntents();
+config.eris.clientOptions.intents = config.eris.intents.value;
+if (config.eris.intents.unknown && config.eris.intents.unknown.length) {
+	log.warn(
+		`config: ERIS_INTENTS contains unknown intent name(s): ${config.eris.intents.unknown.join(
+			', '
+		)}`
+	);
+}
 
 // ---- Privileged identities -------------------------------------------------
 const legacyOwners = []

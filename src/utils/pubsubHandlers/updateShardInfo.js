@@ -11,6 +11,9 @@ let onCooldown = false;
 const request = require('../http.js');
 
 exports.handle = async function (main, _message) {
+	// Upstream's sharder server is optional here; without it there is nowhere to
+	// report to and the old code threw inside the callback (crashing the cluster).
+	if (!process.env.SHARDER_HOST) return;
 	if (onCooldown) return;
 	onCooldown = true;
 	setTimeout(function () {

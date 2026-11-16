@@ -35,7 +35,10 @@ module.exports = new CommandInterface({
 			'SELECT SUM(common) AS common, SUM(uncommon) AS uncommon, SUM(rare) AS rare, SUM(epic) AS epic, SUM(mythical) AS mythical, SUM(legendary) AS legendary FROM animal_count;';
 		sql += 'SELECT command FROM disabled WHERE channel = ' + msg.channel.id + ';';
 
-		let { guilds, users } = await fetchInfo();
+		// Without upstream's sharder server, report this process' own view.
+		let info = process.env.SHARDER_HOST ? await fetchInfo().catch(() => null) : null;
+		let guilds = info ? info.guilds : p.client.guilds.size;
+		let users = info ? info.users : p.client.users.size;
 
 		let ping = p.client.shards.get(p.client.guildShardMap[p.msg.channel.guild.id]).latency;
 
@@ -123,6 +126,10 @@ module.exports = new CommandInterface({
 
 function fetchInfo() {
 	return new Promise((resolve, reject) => {
+		if (!process.env.SHARDER_HOST) {
+			reject(new Error('SHARDER_HOST is not configured'));
+			return;
+		}
 		setTimeout(function () {
 			request(
 				{
