@@ -25,7 +25,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Shows the current coronavirus cases. You can specify a country in the arguments. Stay safe out there and please remember to wash your hands. The information is pulled from this github https://www.worldometers.info/coronavirus/',
 
-	example: ['owo covid', 'owo coronavirus usa'],
+	example: ['o covid', 'o coronavirus usa'],
 
 	related: [],
 

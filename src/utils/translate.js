@@ -20,7 +20,7 @@ const ENDPOINT = process.env.TRANSLATE_URL || 'https://translate.googleapis.com/
 const TIMEOUT_MS = Number.parseInt(process.env.TRANSLATE_TIMEOUT_MS, 10) || 8000;
 const MAX_CHARS = 4000;
 
-// Subset of Google Translate language codes used by `owo listlang`
+// Subset of Google Translate language codes used by `o listlang`
 const languages = {
 	auto: 'Automatic',
 	af: 'Afrikaans',

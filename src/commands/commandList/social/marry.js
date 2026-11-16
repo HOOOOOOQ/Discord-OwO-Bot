@@ -48,9 +48,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Use a ring to marry another user for extra daily rewards! You can reuse the command to upgrade a ring. All rings are the same, there are no extra benefits for a better ring.',
 
-	example: ['owo marry 2 @Scuttler#0001'],
+	example: ['o marry 2 @Scuttler#0001'],
 
-	related: ['owo daily', 'owo shop'],
+	related: ['o daily', 'o shop'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 
@@ -132,7 +132,7 @@ async function propose(p, user, ringId) {
 	sql += `SELECT * FROM user WHERE id = ${user.id}`;
 	result = await p.query(sql);
 	if (result[0].changedRows < 1) {
-		p.errorMsg(", You don't have this ring! Please buy one at `owo shop`!");
+		p.errorMsg(", You don't have this ring! Please buy one at `o shop`!");
 		return;
 	}
 
@@ -148,7 +148,7 @@ async function propose(p, user, ringId) {
 			{
 				name: 'Once you have accepted, you will receive an extra lootbox or weapon crate when you both complete your daily!',
 				value:
-					'`owo am` to accept  |  `owo dm` to decline\nYou can divorce anytime with `owo divorce` or upgrade your marriage ring with `owo marry @' +
+					'`o am` to accept  |  `o dm` to decline\nYou can divorce anytime with `o divorce` or upgrade your marriage ring with `o marry @' +
 					p.getUniqueName(user) +
 					' {ringID}`',
 			},
@@ -285,7 +285,7 @@ async function display(p) {
 
 	if (result.length < 1) {
 		p.errorMsg(
-			', you are not married! Please purchase and include the ring id in the command! ex. `owo marry @user {ringID}`',
+			', you are not married! Please purchase and include the ring id in the command! ex. `o marry @user {ringID}`',
 			3000
 		);
 		return;

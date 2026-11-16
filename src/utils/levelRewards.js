@@ -114,7 +114,7 @@ exports.distributeRewards = async function (msg) {
 		text +=
 			'\n' +
 			infoEmoji +
-			' **|** Level up messages can be disabled for the guild with `owo level disabletext`';
+			' **|** Level up messages can be disabled for the guild with `o level disabletext`';
 
 	// distribute and send
 	await mysql.query(sql);

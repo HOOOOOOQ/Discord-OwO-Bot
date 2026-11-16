@@ -16,7 +16,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Generate a communism cat meme!',
 
-	example: ['owo communism our meme'],
+	example: ['o communism our meme'],
 
 	related: [],
 

@@ -34,7 +34,7 @@ module.exports = class BattleEvent {
 			levelOverride
 		);
 		if (!this.player) {
-			this.p.errorMsg(', Create a team with the command `owo team add {animal}`');
+			this.p.errorMsg(', Create a team with the command `o team add {animal}`');
 			return;
 		}
 		if (!enemy) {

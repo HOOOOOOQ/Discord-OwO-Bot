@@ -1,7 +1,7 @@
 {
 	"sharder": {
 		"path": "/src/owo.js",
-		"name": "OwO Bot"
+		"name": "OCEAN"
 	},
 	"eris": {
 		"clientOptions": {
@@ -28,7 +28,7 @@
 			}
 		}
 	},
-	"prefix": "owo",
+	"prefix": "o",
 	"embed_color": 8240363,
 	"success_color": 65280,
 	"fail_color": 16711680,

@@ -20,7 +20,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Trade an item with a user!',
 
-	example: ['owo trade 10 @user 10000 1'],
+	example: ['o trade 10 @user 10000 1'],
 
 	related: [],
 

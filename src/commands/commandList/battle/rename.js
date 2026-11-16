@@ -14,9 +14,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Rename an animal from your zoo!',
 
-	example: ['owo rename dog doggy'],
+	example: ['o rename dog doggy'],
 
-	related: ['owo zoo', 'owo battle', 'owo hunt'],
+	related: ['o zoo', 'o battle', 'o hunt'],
 
 	permissions: ['sendMessages'],
 
@@ -28,7 +28,7 @@ module.exports = new CommandInterface({
 
 	execute: async function (p) {
 		if (p.args.length < 2) {
-			return p.errorMsg(', The correct command is `owo rename [animal] [name]`!');
+			return p.errorMsg(', The correct command is `o rename [animal] [name]`!');
 		}
 
 		let animal = p.args.shift();

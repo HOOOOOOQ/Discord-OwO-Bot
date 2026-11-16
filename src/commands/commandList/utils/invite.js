@@ -16,7 +16,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo guildlink'],
+	related: ['o guildlink'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 

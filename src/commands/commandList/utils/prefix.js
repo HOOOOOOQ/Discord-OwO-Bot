@@ -32,7 +32,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Change the prefix for the server! Only Server admins are able to use this command.',
 
-	example: ['owo prefix uwu', 'owo prefix owo'],
+	example: ['o prefix uwu', 'o prefix owo'],
 
 	related: [],
 

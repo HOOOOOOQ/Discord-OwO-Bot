@@ -17,7 +17,7 @@ class Curly extends Collectible {
 		this.fullControl = true;
 		this.ownerOnly = true;
 		this.giveAmount = 1;
-		this.description = `Jerome Lester Horwitz, better known by his stage name Curly Howard, was an American comedian and actor.\nHe was well known for his high-pitched voice and vocal expressions ("nyuk-nyuk-nyuk!", "woob-woob-woob!", "soitenly!", "I'm a victim of soikemstance", and barking like a dog.\nHe was the younger brother of Stooges Moe Howard and Shemp Howard.\nFilm critics have cited Curly as the most popular member of the team.  His childlike mannerisms and natural comedic charm made him a hit with audiences, particularly children and women.\n(Combine with moe, shemp, and larry, to make a 3stooges.  Use the command:  owo curly nyuk.)`;
+		this.description = `Jerome Lester Horwitz, better known by his stage name Curly Howard, was an American comedian and actor.\nHe was well known for his high-pitched voice and vocal expressions ("nyuk-nyuk-nyuk!", "woob-woob-woob!", "soitenly!", "I'm a victim of soikemstance", and barking like a dog.\nHe was the younger brother of Stooges Moe Howard and Shemp Howard.\nFilm critics have cited Curly as the most popular member of the team.  His childlike mannerisms and natural comedic charm made him a hit with audiences, particularly children and women.\n(Combine with moe, shemp, and larry, to make a 3stooges.  Use the command: o curly nyuk.)`;
 		this.pluralName = 'Curlies';
 		this.singleName = 'Curly';
 		this.displayMsg = '?emoji? **| ?user?**, you have **?count? ?pluralName?**';

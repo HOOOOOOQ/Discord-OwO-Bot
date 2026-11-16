@@ -16,7 +16,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo uncensor'],
+	related: ['o uncensor'],
 
 	permissions: ['sendMessages'],
 

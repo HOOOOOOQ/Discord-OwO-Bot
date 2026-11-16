@@ -25,7 +25,7 @@ module.exports = new CommandInterface({
 
 	desc: 'This displays the commands or more info on a specific command',
 
-	example: ['owo help cowoncy', 'owo help'],
+	example: ['o help cowoncy', 'o help'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 
@@ -80,7 +80,9 @@ module.exports = new CommandInterface({
 function display(p) {
 	let embed = {
 		description:
-			'Here is the list of commands!\nFor more info on a specific command, use `owo help {command}`\nNeed more help? Come join our [guild](' +
+			'Here is the list of commands!\nFor more info on a specific command, use `' +
+			p.config.prefix +
+			' help {command}`\nNeed more help? Come join our [guild](' +
 			p.config.guildlink +
 			')',
 		color: p.config.embed_color,
@@ -136,7 +138,7 @@ async function describe(p, send, commandName, command) {
 	let example = '';
 	let related = '';
 	let alias = '';
-	let title = '< owo ' + commandName + ' ';
+	let title = '< OCEAN ' + commandName + ' ';
 	if (command.args != '') title += command.args + ' >';
 	else title += '>';
 	if (command.alias[1] != undefined) {

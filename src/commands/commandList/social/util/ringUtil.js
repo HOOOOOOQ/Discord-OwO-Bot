@@ -13,7 +13,7 @@ const sold = '💰';
 exports.buy = async function (p, id) {
 	let ring = rings[id];
 	if (!ring) {
-		p.errorMsg(', that item does not exist! Please choose one from `owo shop`!', 3000);
+		p.errorMsg(', that item does not exist! Please choose one from `o shop`!', 3000);
 		return;
 	}
 

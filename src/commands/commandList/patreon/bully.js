@@ -32,9 +32,9 @@ module.exports = new CommandInterface({
 
 	desc: 'A custom command created by Geist! Bully your friends!',
 
-	example: ['owo bully @user'],
+	example: ['o bully @user'],
 
-	related: ['owo hug'],
+	related: ['o hug'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

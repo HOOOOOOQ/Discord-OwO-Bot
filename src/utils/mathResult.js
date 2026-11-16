@@ -6,7 +6,7 @@
  */
 
 /**
- * Classification helper for `owo math` failures.
+ * Classification helper for `o math` failures.
  *
  * The command used to compare against the literal string
  * "Promise timed out after 1000 ms" while configuring a 3000ms budget, so the

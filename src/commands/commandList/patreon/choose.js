@@ -24,7 +24,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Let me decide a random option from a list of items! This command was created by PandaDasKissen',
 
-	example: ['owo pick dog | cat | mouse'],
+	example: ['o pick dog | cat | mouse'],
 
 	related: [],
 

@@ -17,7 +17,7 @@ const items = {
 		column: 'common_tickets',
 		tradeNote: '⚠️ **You can only trade this item ONCE. The ticket will be unwrapped.**',
 		tradeConvert: 14,
-		desc: 'You can use this item to redeem 1 month of common tier perks!\n\nYou can trade this item with other users with `owo trade 10 {@user} {pricePerTicket} {numberOfTickets}`. An example would be `owo trade 10 @Scuttler 100000 2`. This will trade 2 tickets for a total price of 200000 cowoncy.\n\n**This ticket is only tradeable ONCE.** It will be unwrapped once traded.\n\nYou can also use this item by typing in `owo use 10`.',
+		desc: 'You can use this item to redeem 1 month of common tier perks!\n\nYou can trade this item with other users with `o trade 10 {@user} {pricePerTicket} {numberOfTickets}`. An example would be `o trade 10 @Scuttler 100000 2`. This will trade 2 tickets for a total price of 200000 cowoncy.\n\n**This ticket is only tradeable ONCE.** It will be unwrapped once traded.\n\nYou can also use this item by typing in `o use 10`.',
 	},
 	unwrapped_common_tickets: {
 		id: 14,
@@ -27,7 +27,7 @@ const items = {
 		//tradeLimit: 1,
 		//giveOnly: true,
 		untradeable: true,
-		desc: 'You can use this item to redeem 1 month of common tier perks by typing `owo use 14`.',
+		desc: 'You can use this item to redeem 1 month of common tier perks by typing `o use 14`.',
 	},
 	giveaway_tickets: {
 		id: 18,

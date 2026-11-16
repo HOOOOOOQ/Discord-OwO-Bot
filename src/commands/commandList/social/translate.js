@@ -14,11 +14,11 @@ module.exports = new CommandInterface({
 
 	args: '{msg} -{language}',
 
-	desc: "Translates a message to a specific language. The default language will be english.\nUse 'owo listlang to list all the languages",
+	desc: "Translates a message to a specific language. The default language will be english.\nUse 'o listlang to list all the languages",
 
-	example: ['owo translate Hello -ja', 'owo translate no hablo espanol -en'],
+	example: ['o translate Hello -ja', 'o translate no hablo espanol -en'],
 
-	related: ['owo listlang'],
+	related: ['o listlang'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 
@@ -67,7 +67,7 @@ function translate(p) {
 			p.send({ embed });
 		})
 		.catch(() => {
-			p.errorMsg(', Could not find that language! Use `owo listlang` to see available languages');
+			p.errorMsg(', Could not find that language! Use `o listlang` to see available languages');
 		});
 }
 

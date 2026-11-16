@@ -29,6 +29,11 @@ There is **no default owner**. If `OWNER_IDS` is empty the bot logs a warning an
 every owner-only command (including `eval`) is denied. `DEBUG` defaults to
 `false`; while enabled the bot only answers in `DEBUG_WHITELIST` guilds.
 
+`PREFIX` sets the bot-wide default prefix and defaults to `o` (the bot is called
+**OCEAN**; `sharder.name` in `src/data/config.json` and the `< OCEAN … >` help
+title come from the same rebrand). Servers can still change their own prefix with
+`o prefix <new prefix>`; the global prefix keeps working alongside it.
+
 ## 2. Database
 
 ```bash

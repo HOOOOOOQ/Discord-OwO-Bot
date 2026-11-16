@@ -71,7 +71,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Give a zodiac key to someone! You can only gain one if you receive it! There are 12 in total to collect: Aquarius, Pisces, Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius and Capricorn. This command was created by ?707939636835516457?',
 
-	example: ['owo zodiackey scorpio @Direwolf'],
+	example: ['o zodiackey scorpio @Direwolf'],
 
 	related: [],
 

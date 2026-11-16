@@ -27,9 +27,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Bet your money in the slot machine! Earn up to 10x your money!',
 
-	example: ['owo slots 1000', 'owo slots all', 'owo s 100'],
+	example: ['o slots 1000', 'o slots all', 'o s 100'],
 
-	related: ['owo money', 'owo lottery', 'owo coinflip'],
+	related: ['o money', 'o lottery', 'o coinflip'],
 
 	permissions: ['sendMessages'],
 

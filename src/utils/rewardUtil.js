@@ -141,9 +141,7 @@ exports.getReward = async function (id, uid, con, rewardType, rewardId, rewardCo
 			return {
 				text: `${global.getA(bee.bee.name)} ${bee.bee.name} Bee`,
 				nextLine: `${bee.bee.emoji} **|** "*${bee.bee.text}*"${
-					bee.count > 1
-						? ''
-						: `\n${config.emoji.blank} **|** Type \`owo beehive\` to view your bees!`
+					bee.count > 1 ? '' : `\n${config.emoji.blank} **|** Type \`o beehive\` to view your bees!`
 				}`,
 			};
 		case 'cookie':

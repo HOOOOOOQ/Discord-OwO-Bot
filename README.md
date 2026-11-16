@@ -1,8 +1,14 @@
-# OwO Bot
+# OCEAN
 
 [![Discord Bots](https://discordbots.org/api/widget/status/408785106942164992.svg)](https://discordbots.org/bot/408785106942164992) [![Discord Bots](https://discordbots.org/api/widget/servers/408785106942164992.svg)](https://discordbots.org/bot/408785106942164992) [![Discord Bots](https://discordbots.org/api/widget/lib/408785106942164992.svg)](https://discordbots.org/bot/408785106942164992)
 
-Here are the codes for OwO Bot! Feel free to submit an issue or open a pull request!
+**OCEAN** is a self-hostable Discord bot for animal collection, cowoncy economy and
+team battles — a rebranded fork of [OwO Bot](https://github.com/ChristopherBThai/Discord-OwO-Bot)
+by ChristopherBThai (see [License](#license); the original attribution is kept).
+
+Default prefix: **`o`**. Override the default with the `PREFIX` environment variable,
+or per server with `o prefix <new prefix>` (requires **Manage Channels**).
+Full command list: [COMMANDS.md](COMMANDS.md).
 
 ## Self hosting
 

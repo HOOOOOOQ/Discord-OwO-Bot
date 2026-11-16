@@ -25,9 +25,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Displays the top ranking of each category!',
 
-	example: ['owo top zoo', 'owo top cowoncy global', 'owo top p g'],
+	example: ['o top zoo', 'o top cowoncy global', 'o top p g'],
 
-	related: ['owo my'],
+	related: ['o my'],
 
 	permissions: ['sendMessages'],
 

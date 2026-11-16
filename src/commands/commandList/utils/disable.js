@@ -16,9 +16,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Disable a command in the current channel. You can list multiple commands to disable multiple at once. You can also disable a whole group.',
 
-	example: ['owo disable hunt battle zoo', 'owo disable gambling', 'owo disable all'],
+	example: ['o disable hunt battle zoo', 'o disable gambling', 'o disable all'],
 
-	related: ['owo enable'],
+	related: ['o enable'],
 
 	permissions: ['sendMessages'],
 

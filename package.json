@@ -1,7 +1,7 @@
 {
-	"name": "owobot",
+	"name": "ocean-bot",
 	"version": "1.0.0",
-	"description": "a discord bot!",
+	"description": "OCEAN, a Discord bot for animal collection, economy and battles.",
 	"main": "index.js",
 	"scripts": {
 		"lint": "npx eslint .",

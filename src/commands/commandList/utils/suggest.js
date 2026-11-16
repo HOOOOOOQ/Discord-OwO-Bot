@@ -23,7 +23,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Suggest a new feature. You must be in our support server to suggest.\n' + config.guildlink,
 
-	example: ['owo suggest Add a new type of gamble!'],
+	example: ['o suggest Add a new type of gamble!'],
 
 	related: [],
 

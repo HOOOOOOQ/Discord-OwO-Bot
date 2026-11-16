@@ -17,10 +17,10 @@ module.exports = new CommandInterface({
 	desc: 'Display your profile! Level up by talking on Discord!',
 
 	example: [
-		'owo profile',
-		'owo profile set about Hello!',
-		'owo profile set private',
-		'owo profile set accent #FFFFFF',
+		'o profile',
+		'o profile set about Hello!',
+		'o profile set private',
+		'o profile set accent #FFFFFF',
 	],
 
 	related: [],

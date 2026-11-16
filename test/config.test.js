@@ -67,3 +67,11 @@ test('CLUSTERS override is bounded, invalid values fall back to 60', () => {
 test('prefix override is normalised to lowercase', () => {
 	assert.strictEqual(loadConfig({ PREFIX: 'OWO' }).prefix, 'owo');
 });
+
+test('OCEAN rebrand: default prefix is `o` and the committed bot name is OCEAN', () => {
+	assert.strictEqual(loadConfig({ PREFIX: undefined }).prefix, 'o');
+	assert.strictEqual(loadConfig({}).prefix, 'o');
+	const raw = require('../src/data/config.json');
+	assert.strictEqual(raw.prefix, 'o');
+	assert.strictEqual(raw.sharder.name, 'OCEAN');
+});

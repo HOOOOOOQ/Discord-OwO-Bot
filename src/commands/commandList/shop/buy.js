@@ -18,9 +18,9 @@ module.exports = new CommandInterface({
 
 	desc: 'Buy an item from the shop!',
 
-	example: ['owo buy 2'],
+	example: ['o buy 2'],
 
-	related: ['owo shop'],
+	related: ['o shop'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 
@@ -39,7 +39,7 @@ module.exports = new CommandInterface({
 
 function buy(p, id) {
 	if (id <= 0) {
-		p.errorMsg(', that item does not exist! Please choose one from `owo shop`!', 3000);
+		p.errorMsg(', that item does not exist! Please choose one from `o shop`!', 3000);
 	} else if (id <= 7) {
 		ringUtil.buy(p, id);
 	} else if (id <= 150) {
@@ -47,6 +47,6 @@ function buy(p, id) {
 	} else if (id > 200) {
 		wallpaperUtil.buy(p, id);
 	} else {
-		p.errorMsg(', that item does not exist! Please choose one from `owo shop`!', 3000);
+		p.errorMsg(', that item does not exist! Please choose one from `o shop`!', 3000);
 	}
 }

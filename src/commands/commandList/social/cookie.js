@@ -17,7 +17,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Give a user a cookie!',
 
-	example: ['owo cookie @user', 'owo cookie'],
+	example: ['o cookie @user', 'o cookie'],
 
 	related: [],
 

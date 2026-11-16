@@ -37,7 +37,7 @@ module.exports = new CommandInterface({
 
 	example: [''],
 
-	related: ['owo weapon'],
+	related: ['o weapon'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 

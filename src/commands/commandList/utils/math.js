@@ -26,7 +26,7 @@ module.exports = new CommandInterface({
 
 	desc: 'Let me do your math homework! Add an expression for me to solve! More in-depth syntax can be found here: https://mathjs.org/docs/expressions/syntax.html',
 
-	example: ['owo math 2 + 2'],
+	example: ['o math 2 + 2'],
 
 	related: [],
 

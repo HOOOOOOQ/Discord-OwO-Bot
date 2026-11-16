@@ -16,7 +16,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo link'],
+	related: ['o link'],
 
 	permissions: ['sendMessages', 'embedLinks'],
 

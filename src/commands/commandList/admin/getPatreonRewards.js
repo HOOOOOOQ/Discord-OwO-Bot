@@ -97,7 +97,7 @@ async function getPatreons(p) {
 
 	await p.send(text, null, null, { split: true });
 	await p.send(
-		'Type `owo distributecowoncy {amount}` to send monthly cowoncy to ' +
+		'Type `o distributecowoncy {amount}` to send monthly cowoncy to ' +
 			patreons.cowoncy.length +
 			'+' +
 			result.length +

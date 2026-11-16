@@ -113,7 +113,7 @@ config.giveawayChannels = envIds(
 config.debug = parseBool(process.env.DEBUG, defaults.debug === true);
 // Owner-only dynamic evaluation. Off unless explicitly enabled.
 config.evalEnabled = parseBool(process.env.ALLOW_EVAL, defaults.evalEnabled === true);
-config.prefix = (process.env.PREFIX || defaults.prefix || 'owo').toLowerCase();
+config.prefix = (process.env.PREFIX || defaults.prefix || 'o').toLowerCase();
 config.clusters = Number.parseInt(process.env.CLUSTERS, 10) || defaults.clusters || 60;
 if (!Number.isInteger(config.clusters) || config.clusters < 1 || config.clusters > 200) {
 	log.warn(`config: invalid CLUSTERS value, falling back to 60`);

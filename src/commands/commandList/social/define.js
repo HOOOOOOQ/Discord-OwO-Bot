@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	desc: 'I shall define thy word!',
 
-	example: ['owo define tsundere'],
+	example: ['o define tsundere'],
 
 	related: [],
 

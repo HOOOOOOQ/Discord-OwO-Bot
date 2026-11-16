@@ -68,7 +68,7 @@ exports.addMember = async function (p, animal, pos) {
 	}
 	if (!pos) {
 		p.errorMsg(
-			', Your team is full! Please specify a position with `owo team add {animal} {position}`!',
+			', Your team is full! Please specify a position with `o team add {animal} {position}`!',
 			5000
 		);
 		return;
@@ -245,7 +245,7 @@ exports.renameTeam = async function (p, teamName) {
 			p.replaceMentions(`, You successfully changed your team name to: **${name}**`)
 		);
 	} else {
-		p.errorMsg(", You don't have a team! Please set one with `owo team add {animal}`", 5000);
+		p.errorMsg(", You don't have a team! Please set one with `o team add {animal}`", 5000);
 	}
 };
 
@@ -367,7 +367,7 @@ const createTeamEmbed = (exports.createTeamEmbed = function (p, team, other = {}
 		for (let j = 0; j < team.length; j++) if (team[j].pos == i) animal = team[j];
 		if (!animal) {
 			title += 'none';
-			body = '*`owo team add {animal} ' + i + '`*';
+			body = '*`o team add {animal} ' + i + '`*';
 		} else {
 			let hp = ('' + Math.ceil(animal.stats.hp[1] + animal.stats.hp[3])).padStart(digits, '0');
 			let wp = ('' + Math.ceil(animal.stats.wp[1] + animal.stats.wp[3])).padStart(digits, '0');
@@ -404,7 +404,7 @@ const createTeamEmbed = (exports.createTeamEmbed = function (p, team, other = {}
 			icon_url: p.msg.author.avatarURL,
 		},
 		description:
-			'`owo team add {animal} {pos}` Add an animal to your team\n`owo team remove {pos}` Removes an animal from your team\n`owo team rename {name}` Renames your team\n`owo rename {animal} {name}` Rename an animal\n`owo setteam {teamNum}` to set multiple teams',
+			'`o team add {animal} {pos}` Add an animal to your team\n`o team remove {pos}` Removes an animal from your team\n`o team rename {name}` Renames your team\n`o rename {animal} {name}` Rename an animal\n`o setteam {teamNum}` to set multiple teams',
 		color: p.config.embed_color,
 		footer: {
 			text: `Current Streak: ${streak} | Highest Streak: ${highestStreak}`,

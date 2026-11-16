@@ -19,7 +19,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo battle', 'owo zoo'],
+	related: ['o battle', 'o zoo'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 

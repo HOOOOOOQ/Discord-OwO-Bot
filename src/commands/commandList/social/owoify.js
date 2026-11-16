@@ -15,9 +15,9 @@ module.exports = new CommandInterface({
 
 	args: '{text}',
 
-	desc: "OwOify your text! You can also just type 'owo owoify' to OwOify the message above yours!",
+	desc: "OwOify your text! You can also just type 'o owoify' to OwOify the message above yours!",
 
-	example: ['owo owoify Hello, I like OwO Bot!', 'owo owoify'],
+	example: ['o owoify Hello, I like OwO Bot!', 'o owoify'],
 
 	related: [],
 

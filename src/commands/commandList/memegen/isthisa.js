@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	desc: "Creates a 'is this a ___?' meme! You can also tag a user to use their image!",
 
-	example: ['owo isthisa Is this an AI? | @OwO | me'],
+	example: ['o isthisa Is this an AI? | @OwO | me'],
 
 	related: [],
 

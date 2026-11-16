@@ -27,7 +27,7 @@ module.exports = class WallpaperPage extends PageClass {
 	async getPage(page, embed) {
 		embed.author.name = 'OwO Shop: Wallpapers';
 		embed.description =
-			'Purchase a wallpaper for your profile!\n- **`owo shop wp {page}`** to view the wallpaper as images\n- **`owo buy {id}`** to buy an item\n- **`owo wallpaper`** to view your wallpapers\n- **`owo profile set wallpaper {id}`** to use it\n' +
+			'Purchase a wallpaper for your profile!\n- **`o shop wp {page}`** to view the wallpaper as images\n- **`o buy {id}`** to buy an item\n- **`o wallpaper`** to view your wallpapers\n- **`o profile set wallpaper {id}`** to use it\n' +
 			'═'.repeat(this.charLen + 2) +
 			'\n';
 		let sql = `SELECT b.*,user_backgrounds.uid  FROM backgrounds b LEFT JOIN (user INNER JOIN user_backgrounds ON user.uid = user_backgrounds.uid AND id = ${

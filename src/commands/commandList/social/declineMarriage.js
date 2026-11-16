@@ -18,7 +18,7 @@ module.exports = new CommandInterface({
 
 	example: [],
 
-	related: ['owo marry', 'owo am'],
+	related: ['o marry', 'o am'],
 
 	permissions: ['sendMessages', 'embedLinks', 'addReactions'],
 

@@ -20,9 +20,9 @@ module.exports = new CommandInterface({
 
 	desc: 'A custom command created by ?665648471340220430?!',
 
-	example: ['owo guillotine @user'],
+	example: ['o guillotine @user'],
 
-	related: ['owo hug'],
+	related: ['o hug'],
 
 	permissions: ['sendMessages', 'embedLinks', 'attachFiles'],
 

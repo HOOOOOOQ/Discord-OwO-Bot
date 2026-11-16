@@ -15,9 +15,9 @@ module.exports = new CommandInterface({
 
 	args: '{setguild|unsetguild|previous|emoji1 emoji2 emoji3...}',
 
-	desc: "Enlarge an emoji! You can list multiple emojis are use the 'previous' keyword to enlarge an emoji from the message above you!\nYou can also steal emojis if you use 'owo emoji setguild'.",
+	desc: "Enlarge an emoji! You can list multiple emojis are use the 'previous' keyword to enlarge an emoji from the message above you!\nYou can also steal emojis if you use 'o emoji setguild'.",
 
-	example: ['owo emoji previous', 'owo emoji setguild'],
+	example: ['o emoji previous', 'o emoji setguild'],
 
 	related: [],
 
