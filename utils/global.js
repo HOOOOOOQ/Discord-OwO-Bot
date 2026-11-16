@@ -4,9 +4,13 @@
  * This software is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
  * For more information, see README.md and LICENSE
  */
+const connection = require('../src/utils/dbUrl.js').resolveRedis();
 const pub = require('redis').createClient({
-	host: process.env.REDIS_HOST,
-	password: process.env.REDIS_PASS,
+	host: connection.host,
+	port: connection.port,
+	password: connection.password,
+	db: connection.db,
+	tls: connection.tls ? {} : undefined,
 });
 
 exports.resetBot = async function () {
