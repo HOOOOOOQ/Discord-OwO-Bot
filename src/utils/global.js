@@ -159,6 +159,12 @@ exports.getRoleColor = function (member) {
 
 exports.getTotalShardCount = function () {
 	if (totalShards) return totalShards;
+	// Self-hosted deployments have no sharder server: the bot's own shard count
+	// is the total.
+	if (!process.env.SHARDER_HOST) {
+		totalShards = (client && client.shards && client.shards.size) || 1;
+		return Promise.resolve(totalShards);
+	}
 	return new Promise((resolve, reject) => {
 		request(
 			{

@@ -1,5 +1,34 @@
 # FIXLOG
 
+## Self-hosting boot: shards without upstream's sharder server, intents, diagnostics
+
+- **Shard allocation no longer requires `SHARDER_HOST`** (an upstream-private
+  service that self-hosters cannot get). Order: `SHARDS`/`SHARD_FIRST`/
+  `SHARD_LAST` → `SHARDER_HOST` → Discord `GET /gateway/bot` → single shard.
+  `src/utils/shardConfig.js`.
+- **Worker clusters no longer abort on missing shard config.** `index.js` used to
+  validate `firstShardID`/`lastShardID` in _every_ process; workers receive their
+  range over IPC, so with `DEBUG` off they threw, never created a client, and the
+  bot stayed offline while the master process looked healthy.
+- **`MESSAGE CONTENT INTENT` is requested** (`src/utils/intents.js`). Upstream
+  shipped no `intents`, so eris used `allNonPrivileged` and every command was
+  silently ignored. The startup check reads `/applications/@me` flags and only
+  requests the privileged bit when the portal allows it (requesting it while
+  disabled closes the gateway with 4014). `ERIS_MESSAGE_CONTENT=auto|on|off`,
+  `ERIS_INTENTS=<names or numbers>`.
+- **Startup diagnostics + `node index.js --doctor`** (`src/utils/diagnostics.js`,
+  `src/utils/doctor.js`): validates the token, reports whether the intent is
+  enabled, prints the shard source, and probes `DATABASE_URL`/`REDIS_URL`.
+- **Actionable gateway logs**: `src/utils/gatewayCodes.js` translates close codes
+  (4004 bad token, 4014 disallowed intents, 4010 bad shard, …) and `ready` now
+  reports the bot tag, guild count and shard range.
+- **Optional sharder endpoints are guarded**: `InfoUpdater`,
+  `updateShardInfo` (previously threw inside a callback and could crash a
+  cluster), `global.getTotalShardCount`, `o stats` and `o shards` now degrade to
+  local values instead of calling `undefined/...` URLs.
+- Tests: `test/shardConfig.test.js`, `test/intents.test.js`,
+  `test/discordApi.test.js`, `test/doctor.test.js`.
+
 Every entry lists the issue, its root cause, the files touched, the solution and
 how it was verified. Timestamps are UTC. No secrets appear in this document.
 

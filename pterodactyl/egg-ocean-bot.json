@@ -55,6 +55,26 @@
 			"user_editable": true,
 			"rules": "nullable|string",
 			"field_type": "text"
+		},
+		{
+			"name": "Message Content Intent",
+			"description": "auto = minta MESSAGE CONTENT INTENT hanya kalau portal Discord mengizinkannya. on = selalu minta (portal wajib ON, kalau tidak gateway menutup dengan 4014). off = jangan minta (bot online tapi tidak membaca command).",
+			"env_variable": "ERIS_MESSAGE_CONTENT",
+			"default_value": "auto",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|string|in:auto,on,off",
+			"field_type": "text"
+		},
+		{
+			"name": "Shard Count",
+			"description": "Opsional. Kosong = jumlah shard dari rekomendasi Discord (GET /gateway/bot). Isi angka hanya untuk memaksa jumlah shard tertentu.",
+			"env_variable": "SHARDS",
+			"default_value": "",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "nullable|integer|min:1|max:1000",
+			"field_type": "text"
 		}
 	]
 }

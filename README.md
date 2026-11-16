@@ -35,6 +35,20 @@ all owner-only commands (including `eval`) stay disabled. `DEBUG` defaults to
 `DATABASE_URL` (`mysql://user:pass@host:3306/owo`), `REDIS_URL`
 (`redis://:pass@host:6379/0`), `PREFIX`, `CLUSTERS`.
 
+Two things bite self-hosters, and both are checked at startup:
+
+- **MESSAGE CONTENT INTENT** must be enabled in the Discord Developer Portal
+  (Bot → Privileged Gateway Intents). Without it the bot is online but ignores
+  every command. `ERIS_MESSAGE_CONTENT=auto|on|off` controls whether it is
+  requested; `ERIS_INTENTS` pins the whole bitmask.
+- **Shards do not need upstream's sharder server.** `SHARDER_HOST` is an
+  upstream-private service; leave it empty and the shard count comes from
+  Discord's recommendation (`SHARDS`/`SHARD_FIRST`/`SHARD_LAST` override).
+
+```bash
+node index.js --doctor    # token, intents, shard source, DB/Redis reachability
+```
+
 Docker (bot + MariaDB + Redis) is available but optional:
 
 ```bash
