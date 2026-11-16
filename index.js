@@ -17,6 +17,16 @@ if (!process.env.BOT_TOKEN) {
 	}
 }
 
+// `node index.js --verify` loads every command through the real registry and
+// exits. Hosts that can only start the entrypoint (e.g. a Pterodactyl server
+// whose startup command is fixed to index.js) use this instead of npm scripts.
+if (process.argv.includes('--verify')) {
+	const { verify, report } = require('./scripts/verifyCommands.js');
+	const ok = report(verify());
+	// the registry opens redis/mysql handles, so exit explicitly
+	process.exit(ok ? 0 : 1);
+}
+
 // Config file (environment overrides applied inside the loader)
 const config = require('./src/utils/config.js');
 const log = require('./src/utils/log.js');

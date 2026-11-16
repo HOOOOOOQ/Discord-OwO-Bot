@@ -34,11 +34,13 @@ function probe(host, port) {
 }
 
 (async () => {
-	const mysqlPort = Number.parseInt(process.env.MYSQL_PORT, 10) || 3306;
-	const redisPort = Number.parseInt(process.env.REDIS_PORT, 10) || 6379;
+	const { resolveMysql, resolveRedis } = require('../src/utils/dbUrl.js');
+	// Respects DATABASE_URL / REDIS_URL as well as the legacy variables.
+	const mysqlConnection = resolveMysql();
+	const redisConnection = resolveRedis();
 	const [mysql, redis] = await Promise.all([
-		probe(process.env.MYSQL_HOST, mysqlPort),
-		probe(process.env.REDIS_HOST, redisPort),
+		probe(mysqlConnection.host, mysqlConnection.port || 3306),
+		probe(redisConnection.host, redisConnection.port || 6379),
 	]);
 
 	const summary = `mysql=${mysql.ok ? 'ok' : mysql.reason} redis=${redis.ok ? 'ok' : redis.reason}`;

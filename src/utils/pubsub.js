@@ -6,13 +6,22 @@
  */
 
 const redis = require('redis');
+const { resolveRedis } = require('./dbUrl.js');
+
+const connection = resolveRedis();
 const sub = redis.createClient({
-	host: process.env.REDIS_HOST,
-	password: process.env.REDIS_PASS,
+	host: connection.host,
+	port: connection.port,
+	password: connection.password,
+	db: connection.db,
+	tls: connection.tls ? {} : undefined,
 });
 const pub = redis.createClient({
-	host: process.env.REDIS_HOST,
-	password: process.env.REDIS_PASS,
+	host: connection.host,
+	port: connection.port,
+	password: connection.password,
+	db: connection.db,
+	tls: connection.tls ? {} : undefined,
 });
 
 const requireDir = require('require-dir');

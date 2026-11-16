@@ -6,13 +6,18 @@
  */
 
 const log = require('./log.js');
+const { resolveMysql } = require('./dbUrl.js');
 const mysql = require('mysql');
 
+// DATABASE_URL/MYSQL_URL wins over the legacy MYSQL_* variables.
+const connection = resolveMysql();
+
 const config = {
-	host: process.env.MYSQL_HOST,
-	user: process.env.MYSQL_USER,
-	password: process.env.MYSQL_PASS,
-	database: process.env.MYSQL_DATABASE || 'owo',
+	host: connection.host,
+	port: connection.port,
+	user: connection.user,
+	password: connection.password,
+	database: connection.database,
 	supportBigNumbers: true,
 	// Several existing battle/team queries send more than one statement in a
 	// single call (battle/ab.js, battle/db.js, zoo/sacrifice.js, teamUtil.js), so

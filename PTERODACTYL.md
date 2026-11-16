@@ -109,8 +109,17 @@ Bot harus ada di volume `/home/container`:
   `package-lock.json`, `.env.example`.
 - **Jangan** upload `node_modules` (akan dibuat ulang oleh installer).
 
-Setelah file ter-upload: tekan **Reinstall Server** (egg akan menjalankan
-`npm ci --omit=dev`; kompilasi `canvas` butuh beberapa menit).
+Setelah file ter-upload: tekan **Reinstall Server**. Installer egg menjalankan
+dua hal — persis yang kamu butuhkan kalau startup command di panel dikunci ke
+`index.js`:
+
+1. `npm ci --omit=dev --no-audit --no-fund` (kompilasi `canvas`, beberapa menit)
+2. `npm run verify:commands` (memuat seluruh registry command; kalau gagal,
+   instalasi ikut gagal dan error-nya kelihatan di log install)
+
+Kalau suatu saat ingin mengulang pengecekan tanpa akses shell, jalankan server
+dengan startup command `node index.js --verify` — proses hanya memuat registry
+lalu keluar dengan exit code 0/1, tanpa menyalakan sharder.
 
 ---
 
@@ -130,6 +139,9 @@ mysql -u root -p -e "CREATE USER 'owo'@'172.18.%' IDENTIFIED BY 'PASSWORD_KUAT';
 GRANT ALL PRIVILEGES ON owo.* TO 'owo'@'172.18.%'; FLUSH PRIVILEGES;"
 ```
 
+Kalau memakai `.env`, semua info ini cukup dirangkum jadi
+`DATABASE_URL=mysql://owo:PASSWORD_KUAT@172.18.0.1:3306/owo`.
+
 `/etc/mysql/mariadb.conf.d/50-server.cnf`:
 
 ```ini
@@ -147,43 +159,46 @@ protected-mode yes
 requirepass PASSWORD_REDIS
 ```
 
-Lalu isi `REDIS_PASS` di `.env`. Redis **wajib** karena prefix per-server,
-cooldown, dan pub/sub lewat Redis.
+Lalu isi di `.env`: `REDIS_URL=redis://:PASSWORD_REDIS@172.18.0.1:6379/0` (atau
+`REDIS_PASS` kalau memakai variabel manual). Redis **wajib** karena prefix
+per-server, cooldown, dan pub/sub lewat Redis.
 
 ---
 
 ## 6. `.env`
 
-Buat `.env` di root server (File Manager) — jangan lewatkan langkah ini:
+Buat `.env` di root server (File Manager). **Enam baris ini cukup**:
 
 ```ini
 BOT_TOKEN=token_bot_dari_developer_portal
 OWNER_IDS=123456789012345678
+
+DATABASE_URL=mysql://owo:PASSWORD_KUAT@172.18.0.1:3306/owo
+REDIS_URL=redis://:PASSWORD_REDIS@172.18.0.1:6379/0
+
 PREFIX=o
 CLUSTERS=2
-
-MYSQL_HOST=172.18.0.1
-MYSQL_USER=owo
-MYSQL_PASS=PASSWORD_KUAT
-MYSQL_DATABASE=owo
-REDIS_HOST=172.18.0.1
-REDIS_PASS=PASSWORD_REDIS
-
-DEBUG=false
-ALLOW_EVAL=false
-EXIT_ON_FATAL=true
-LOG_LEVEL=info
-
-# opsional: siapa saja yang boleh menambah cowoncy
-# COWONCY_ADMIN_IDS=111111111111111111,222222222222222222
-# COWONCY_ADMIN_ROLE_IDS=333333333333333333
-# COWONCY_GRANT_MAX=1000000000
 ```
 
-Semua kunci yang tersedia ada di `.env.example`. Tanpa `BOT_TOKEN` proses
-langsung exit (exit code 1) — itu normal dan terlihat di console.
+Catatan:
 
----
+- `DATABASE_URL` → `mysql://USER:PASSWORD@HOST:PORT/DATABASE` (skema
+  `mariadb://` juga diterima). Password dengan karakter khusus harus di-encode:
+  `@` → `%40`, `:` → `%3A`, `#` → `%23`.
+- `REDIS_URL` → `redis://:PASSWORD@HOST:PORT/DB` (pakai `rediss://` kalau Redis
+  pakai TLS). Tanpa password: `redis://172.18.0.1:6379`.
+- **Tidak ada MongoDB** di project ini — databasenya MySQL/MariaDB.
+- Cara lama (`MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASS`, `MYSQL_DATABASE`,
+  `REDIS_HOST`, `REDIS_PASS`) masih jalan dan dipakai kalau URL tidak diisi.
+  Kalau dua-duanya diisi, **URL yang menang**.
+- Variabel panel (`CLUSTERS`, `PREFIX`, `OWNER_IDS`) menang atas `.env`, karena
+  dotenv tidak menimpa env yang sudah ada.
+- `ALLOW_EVAL=false` dan `DEBUG=false` sudah default; jangan dinyalakan di
+  server publik. Opsi lain (cowoncy grant, sharder, integrasi) ada di
+  `.env.example` — semuanya opsional.
+
+Tanpa `BOT_TOKEN` proses langsung exit (exit code 1) — itu normal dan terlihat
+di console.
 
 ## 7. Start & verifikasi
 
@@ -222,16 +237,18 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 
 ## 9. Troubleshooting
 
-| Gejala                                                    | Penyebab & solusi                                                                                                                                           |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Install gagal: `cairo.h: No such file` / `node-gyp` error | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.         |
-| Start tapi crash `Cannot find module 'canvas'`            | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama. |
-| `ECONNREFUSED 127.0.0.1:3306` / Redis                     | `MYSQL_HOST`/`REDIS_HOST` masih `localhost`. Pakai `172.18.0.1` atau IP host; cek `bind-address`/`bind` dan firewall.                                       |
-| Server mati sendiri, log `heap out of memory`             | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                     |
-| Panel tetap "Starting" walau bot online                   | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                   |
-| Command memegen error `Could not grab drake.jpg`          | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                        |
-| Prefix tidak berubah                                      | Variabel panel `PREFIX` menang atas `.env`; ubah di tab Startup atau hapus variabelnya.                                                                     |
-| `EACCES` saat menulis `secret/`                           | File ter-upload sebagai owner yang salah; lewat File Manager/SFTP panel (user `container`).                                                                 |
+| Gejala                                                    | Penyebab & solusi                                                                                                                                              |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Install gagal: `cairo.h: No such file` / `node-gyp` error | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.            |
+| Start tapi crash `Cannot find module 'canvas'`            | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama.    |
+| `ECONNREFUSED 127.0.0.1:3306` / Redis                     | `MYSQL_HOST`/`REDIS_HOST` masih `localhost`. Pakai `172.18.0.1` atau IP host; cek `bind-address`/`bind` dan firewall.                                          |
+| Server mati sendiri, log `heap out of memory`             | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                        |
+| Panel tetap "Starting" walau bot online                   | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                      |
+| Command memegen error `Could not grab drake.jpg`          | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                           |
+| Install berhenti di `verify:commands`                     | Registry command gagal dimuat (file kurang / `node_modules` korup). Cek log install, upload ulang file yang kurang, lalu Reinstall lagi.                       |
+| `mysql: DATABASE_URL is invalid` di log                   | Format URL salah (skema bukan `mysql://`/`mariadb://`, atau password belum di-encode). Bot otomatis jatuh ke `MYSQL_*`; perbaiki URL atau isi variabel manual. |
+| Prefix tidak berubah                                      | Variabel panel `PREFIX` menang atas `.env`; ubah di tab Startup atau hapus variabelnya.                                                                        |
+| `EACCES` saat menulis `secret/`                           | File ter-upload sebagai owner yang salah; lewat File Manager/SFTP panel (user `container`).                                                                    |
 
 ---
 

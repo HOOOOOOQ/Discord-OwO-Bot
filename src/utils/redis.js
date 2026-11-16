@@ -1,5 +1,9 @@
 const redis = require('redis');
 const log = require('./log.js');
+const { resolveRedis } = require('./dbUrl.js');
+
+// REDIS_URL wins over the legacy REDIS_HOST/REDIS_PASS variables.
+const connection = resolveRedis();
 
 // node_redis v2 reconnects on its own; the strategy only caps the backoff so a
 // dead Redis cannot spin the CPU or give up permanently.
@@ -10,9 +14,11 @@ const retryStrategy = function (options) {
 };
 
 const client = redis.createClient({
-	host: process.env.REDIS_HOST,
-	password: process.env.REDIS_PASS,
-	tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
+	host: connection.host,
+	port: connection.port,
+	password: connection.password,
+	db: connection.db,
+	tls: connection.tls ? {} : undefined,
 	retry_strategy: retryStrategy,
 });
 

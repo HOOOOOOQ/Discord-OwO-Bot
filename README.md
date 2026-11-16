@@ -21,7 +21,7 @@ toolchain (`build-essential python3 libcairo2-dev libpango1.0-dev libjpeg-dev
 libgif-dev librsvg2-dev`) for the `canvas` dependency.
 
 ```bash
-cp .env.example .env      # add your BOT_TOKEN, OWNER_IDS, MySQL/Redis settings
+cp .env.example .env      # minimal: BOT_TOKEN, OWNER_IDS, DATABASE_URL, REDIS_URL
 npm ci
 npm run verify:commands   # loads every command module
 node index.js
@@ -29,7 +29,9 @@ node index.js
 
 There is **no default owner**: set `OWNER_IDS` to your Discord user id, otherwise
 all owner-only commands (including `eval`) stay disabled. `DEBUG` defaults to
-`false`.
+`false`. Six variables are enough to run: `BOT_TOKEN`, `OWNER_IDS`,
+`DATABASE_URL` (`mysql://user:pass@host:3306/owo`), `REDIS_URL`
+(`redis://:pass@host:6379/0`), `PREFIX`, `CLUSTERS`.
 
 Docker (bot + MariaDB + Redis) is available but optional:
 

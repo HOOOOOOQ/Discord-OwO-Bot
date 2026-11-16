@@ -21,9 +21,17 @@ Minimum for a working instance:
 ```ini
 BOT_TOKEN=...
 OWNER_IDS=<your discord user id>     # empty => owner commands disabled
-MYSQL_HOST / MYSQL_USER / MYSQL_PASS / MYSQL_DATABASE
-REDIS_HOST
+DATABASE_URL=mysql://owo:password@172.18.0.1:3306/owo
+REDIS_URL=redis://:password@172.18.0.1:6379/0
+PREFIX=o
+CLUSTERS=2
 ```
+
+`DATABASE_URL`/`REDIS_URL` are the simple path: one connection string per
+service (`mysql://`, `mariadb://`, `redis://` or `rediss://` for TLS). The older
+`MYSQL_HOST/MYSQL_USER/MYSQL_PASS/MYSQL_DATABASE` and `REDIS_HOST/REDIS_PASS`
+variables still work and are used when no URL is set — a URL always wins. There
+is **no MongoDB** in this project; the database is MySQL/MariaDB.
 
 There is **no default owner**. If `OWNER_IDS` is empty the bot logs a warning and
 every owner-only command (including `eval`) is denied. `DEBUG` defaults to
