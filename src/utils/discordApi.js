@@ -16,6 +16,8 @@
 
 const log = require('./log.js');
 
+const tokenUtil = require('./token.js');
+
 const DEFAULT_API_BASE = 'https://discord.com/api/v10';
 const DEFAULT_TIMEOUT_MS = Number.parseInt(process.env.DISCORD_API_TIMEOUT_MS, 10) || 10000;
 
@@ -39,9 +41,7 @@ function apiBase() {
 
 /** Accepts a raw token or one already prefixed with `Bot `. */
 function normalizeToken(token) {
-	const value = String(token || '').trim();
-	if (!value) return 'Bot ';
-	return /^Bot /i.test(value) ? `Bot ${value.slice(4).trim()}` : `Bot ${value}`;
+	return tokenUtil.botAuth(token);
 }
 
 async function apiGet(token, path, options = {}) {

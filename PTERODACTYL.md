@@ -289,15 +289,22 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 >
 > ```
 > [BOOT] OCEAN starting — node v20.x, pid 123, CLUSTERS=2
+> [BOOT] running build 2cbdd6c728b1 (compare this with: node index.js --doctor)
 > [SHARD] shards 0~0 of 1 (SHARDS env)
 > [CONFIG] prefix=o debug=false clusters=2 shards=1 intents=130813
 > [DISCORD] authentication successful — Ocean#5352 (id 1571…)
 > [CLUSTER] worker 1 forked
 > [CLUSTER] worker 1 online
 > [GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+> [STATE] HELLO_RECEIVED — shard=0 heartbeat_interval=41250ms
 > [GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
+> [STATE] IDENTIFY_SENT — shard=0 intents=130813 presence=online shard=[0/1]
+> [STATE] HEARTBEAT_ACKNOWLEDGED — shard=0
+> [STATE] READY_RECEIVED — shard=0 Ocean guilds=1 session=abcdef12…
 > [SHARD] shard 0 READY after 412ms
 > [GATEWAY] all shards READY — 1 shard(s), 1 guild(s)
+> [STATE] BOT_ONLINE — 1 shard(s), 1 guild(s)
+> [STATE] PRESENCE_SYNCHRONIZED — status=online playing "o help"
 > bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
 > Bot is online. Commands accept the prefix "o" (try "ohelp")
 > [HEALTH] OCEAN IS ONLINE — Ocean#5352
@@ -357,6 +364,33 @@ Copy Server ID), atau hapus `DEBUG` setelah sharding normal.
 **4. Belum di-invite.** `bot ready: ... in 0 guild(s)` berarti bot tidak berada
 di server mana pun; invite lewat
 `https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot&permissions=8`.
+
+**5. Token tersalin lengkap dengan prefix `Bot `.** Nilai seperti
+`Bot MTIz...` dulu menjadi `Bot Bot MTIz...` di gateway: REST tetap lolos
+(`--doctor` bilang token valid) tetapi socket ditutup **4004** dan bot tidak
+pernah online. Sekarang nilainya dinormalkan otomatis dan panel memberi tahu:
+
+```
+[CONFIG] BOT_TOKEN normalised — removed a duplicated "Bot " prefix; replace the panel variable with just the token
+```
+
+Tetap disarankan menyimpan variabelnya **tanpa** `Bot `, tanpa tanda kutip, tanpa
+newline di belakang. Gejala khas kalau langkah ini terlewat: `--doctor` hijau,
+`[GATEWAY] connecting …` muncul, lalu tidak ada `[STATE] IDENTIFY_SENT` /
+`READY_RECEIVED`.
+
+**6. Panel menjalankan source lama.** Pterodactyl menjalankan apa pun yang ada di
+`/home/container`: upload zip, extract, dan Start adalah tiga langkah terpisah.
+Bandingkan sidik jari build:
+
+```
+[BOOT] running build 2cbdd6c728b1     <- console server
+[info] source build — 2cbdd6c728b1    <- node index.js --doctor
+```
+
+Kalau angkanya beda, panel masih memakai file lama: extract ulang arsipnya
+(timpa semua file), lalu Start. Tanpa perbandingan ini tidak ada log yang bisa
+membedakan "kode baru gagal" dari "kode lama masih jalan".
 
 Kalau butuh semua jawaban sekaligus, jalankan `node index.js --doctor`.
 

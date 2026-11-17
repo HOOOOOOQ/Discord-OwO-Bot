@@ -153,7 +153,23 @@ exports.installProcessHandlers = function (options = {}) {
 	});
 
 	process.on('uncaughtException', (err) => {
-		log.error('uncaughtException:', err);
+		log.error('[FATAL] uncaughtException:', err);
+		try {
+			// Lazy require: keeps errors.js free of a module cycle and works in
+			// workers that never installed the gateway instrumentation.
+			const gateway = require('./gatewayBoot.js');
+			const sinceReady =
+				gateway.state && gateway.state.readySeenAt ? Date.now() - gateway.state.readySeenAt : null;
+			if (sinceReady !== null) {
+				log.error(
+					`[FATAL] crash happened ${sinceReady}ms AFTER gateway READY — the shard drops offline and ` +
+						'eris-sharder restarts the cluster (this is why a bot can look online for a second)'
+				);
+			}
+			if (gateway.phaseSummary) log.error(`[FATAL] gateway timeline: ${gateway.phaseSummary()}`);
+		} catch (traceErr) {
+			log.debug(`[FATAL] gateway timeline unavailable: ${traceErr.message}`);
+		}
 		if (config.exitOnFatal) {
 			// Flush what we can and let the sharder supervise a clean restart
 			exports.runShutdown('uncaughtException', 1);
