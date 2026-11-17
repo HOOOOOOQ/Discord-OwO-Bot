@@ -120,12 +120,22 @@ Startup logs tell you what was decided:
 ```
 [BOOT] OCEAN starting — node v20.x, pid 123, CLUSTERS=2
 [BOOT] running build 2cbdd6c728b1 (compare this with: node index.js --doctor)
+[BOOT] dns lookup order=ipv4first
+[GATEWAY] probe: HELLO in 132ms (heartbeat 41250ms) — the gateway is reachable
 [SHARD] shards 0~0 of 1 (Discord's recommendation)
 [CONFIG] prefix=o debug=false clusters=2 shards=1 intents=130813
 discord: token ok — Ocean#5352 (id 1571…)
 discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
 [CLUSTER] worker 1 forked / [CLUSTER] worker 1 online
 [GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+[CLUSTER] worker 1 online
+[GATEWAY] stage process_started — pid 2519 isWorker=true
+[CLUSTER] worker 1 gateway stage process_started — pid 2519 isWorker=true
+[BOOT] worker 2519 mode confirmed (cluster.isWorker=true), gateway instrumentation installed=true, build 2cbdd6c728b1
+[GATEWAY] stage sharder_constructed — path /src/owo.js
+[GATEWAY] stage ipc_connect_received — cluster 0, shards 0~0 of 1
+[SHARD] plan: cluster 0 → worker 1, shards 0~0
+[GATEWAY] stage connect_called — Client at 9ms
 [STATE] HELLO_RECEIVED — shard=0 heartbeat_interval=41250ms
 [GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
 [STATE] IDENTIFY_SENT — shard=0 intents=130813 presence=online shard=[0/1]
@@ -151,6 +161,22 @@ shard-local `rawWS` for HELLO / HEARTBEAT_ACK / READY), so a run that stops afte
 `IDENTIFY_SENT` was rejected by Discord (4004 token, 4014 privileged intent,
 4010/4011 shard config). `BOT_ONLINE` is only printed by the client `ready`
 event, i.e. when eris has every shard ready — never from process liveness.
+
+If the worker never gets past `[BOOT] worker …`, the bot is **not** connected — a
+worker "online" only means the process exists. Each startup stage is printed and
+mirrored to the master (`[CLUSTER] worker N gateway stage …`), and after
+`GATEWAY_CONNECT_TIMEOUT_MS` (default 15 s) the log states which stage was never
+reached: `CONNECTION NOT STARTED` (no Eris client / no IPC shard assignment),
+`WEBSOCKET NOT OPENED` (socket never reached Discord — DNS/IPv6/egress) or
+`READY TIMEOUT` (Discord rejected IDENTIFY). `[DIAG]` lines then carry the pid,
+cluster, stage table, last packet and last error.
+
+`ws` has no Happy Eyeballs, so a host with a broken IPv6 route can pass every REST
+check while the gateway never connects. `src/utils/discordDns.js` sets the lookup
+order to `ipv4first` in every process (`GATEWAY_IPV4_FIRST=false` to keep the system
+order) and `GATEWAY_HANDSHAKE_TIMEOUT_MS` (default 20 s) turns a hanging handshake
+into a normal error. `--doctor` opens a real WebSocket to the gateway (HELLO only, no
+IDENTIFY, no session consumed) and reports it as `[ok] gateway websocket`.
 
 `BOT_TOKEN` is normalised by `src/utils/token.js`: a value pasted as
 `Bot <token>`, wrapped in quotes, or saved with a trailing newline is corrected

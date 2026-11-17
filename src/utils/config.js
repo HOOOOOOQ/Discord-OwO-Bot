@@ -93,6 +93,20 @@ config.eris = {
 // detect that the portal toggle is disabled.
 config.eris.intents = resolveIntents();
 config.eris.clientOptions.intents = config.eris.intents.value;
+
+// A WebSocket handshake that hangs (blocked egress, unroutable IPv6, transparent
+// proxy) produces no error at all: eris never emits "connect", the shard never
+// sends IDENTIFY, and the bot is simply offline. `ws` accepts handshakeTimeout,
+// and eris passes this object straight to `new WebSocket(url, options)`
+// (lib/gateway/Shard.js), so the hang becomes a normal socket error that the
+// gateway logging reports. Must stay JSON-serialisable: the options travel to the
+// workers over cluster IPC.
+const handshakeTimeoutMs = Number.parseInt(process.env.GATEWAY_HANDSHAKE_TIMEOUT_MS, 10);
+config.eris.clientOptions.ws = {
+	...(config.eris.clientOptions.ws || {}),
+	handshakeTimeout:
+		Number.isInteger(handshakeTimeoutMs) && handshakeTimeoutMs > 0 ? handshakeTimeoutMs : 20000,
+};
 if (config.eris.intents.unknown && config.eris.intents.unknown.length) {
 	log.warn(
 		`config: ERIS_INTENTS contains unknown intent name(s): ${config.eris.intents.unknown.join(

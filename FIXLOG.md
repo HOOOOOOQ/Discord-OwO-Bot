@@ -1,5 +1,75 @@
 # FIXLOG
 
+## Worker alive, gateway never starts — staged supervisor, IPv4-first DNS, IPC stage beacons
+
+Reported evidence: Node starts, `[DISCORD] authentication successful`, cluster manager
+up, worker forked/online, `installed=true` — and then nothing: no `Cluster 0 |
+Connecting with 1 shard(s)`, no socket, no HELLO, no IDENTIFY, no READY, no error.
+"Worker online" is not "gateway connected", and nothing in the previous build could
+tell those two apart.
+
+What was verified against the installed sources and reproduced locally
+(Node 22, `DEBUG=true`, `CLUSTERS=2`, fake token):
+
+- **`DEBUG` does not touch the gateway.** `grep config.debug` shows it only forces
+  one shard/cluster (`index.js`), limits which guilds are answered
+  (`messageCreate.js`, `ready.js`), short-circuits pubsub handlers, and adds error
+  stacks. With `DEBUG=true, CLUSTERS=2` run locally, the worker reaches
+  `connect()` in 9 ms. So DEBUG is not the cause — the reported log just proves the
+  bot was in a restricted dev mode.
+- **eris-sharder creates the Eris client only on its IPC `connect` message**
+  (`node_modules/eris-sharder/src/sharding/cluster.js:76-96`): the worker's
+  `process.on("message")` handles `name === "connect"` and only then calls
+  `this.connect(...)` → `new Eris(...)` → `bot.connect()`. If that message is never
+  delivered the worker sits idle forever, with **no log line at all**. The master
+  side that sends it (`clustermanager.js:151-171`, `connectShards()` →
+  `queue.queueItem()` → `master.workers[id].send()`) runs inside an async
+  `process.nextTick` where any throw becomes a swallowed unhandled rejection.
+- **`Cluster.spawn()` also silently returns** if the shard range is bogus
+  (`if (this.shards < 1) return;`), again with no log.
+
+So the previous build had two silent dead-ends _and_ judged liveness from the
+process. This pass makes the whole path observable and removes the dead-ends:
+
+1. **Staged supervisor in the worker** (`src/utils/gatewayBoot.js`), driven only by
+   real signals: `process_started → sharder_constructed → ipc_connect_received
+(process "message" spy) → connect_called (patched Client#connect) →
+websocket_open (client "connect") → hello_received / identify_sent /
+ready_received (gateway packets)`. Each stage prints `[GATEWAY] stage …`.
+2. **IPC stage beacons**: every stage is also sent to the master, which prints
+   `[CLUSTER] worker N gateway stage …` — so the timeline survives even if the
+   worker's own stdout is lost on the panel.
+3. **15 s staged watchdog** (`GATEWAY_CONNECT_TIMEOUT_MS`) printing exactly one of
+   `[GATEWAY] CONNECTION NOT STARTED` (+ `[DIAG]` lines naming whether the IPC
+   message, the client or `connect()` was missing), `[GATEWAY] WEBSOCKET NOT
+OPENED`, or `[GATEWAY] READY TIMEOUT`, followed by the stage table, last packet,
+   last error, pid, cluster and elapsed time. A master-side watchdog prints the same
+   verdict from the beacons (`CONNECTION NOT STARTED (master view)`).
+4. **IPv4-first DNS** (`src/utils/discordDns.js`): `ws` (the gateway) does no Happy
+   Eyeballs, so on a host with a broken IPv6 route REST works while the gateway
+   hangs silently — the classic "auth successful, never online". The lookup order is
+   set to `ipv4first` in every process before any socket opens
+   (`GATEWAY_IPV4_FIRST=false` restores `verbatim`), and the boot log prints
+   `[BOOT] dns lookup order=…`.
+5. **Handshake timeout**: `clientOptions.ws.handshakeTimeout`
+   (`GATEWAY_HANDSHAKE_TIMEOUT_MS`, default 20 s) turns a hanging DNS/TCP/TLS
+   upgrade into a normal socket error instead of silence.
+6. **Gateway probe** (`src/utils/gatewayProbe.js`): a real WebSocket handshake to
+   `wss://gateway.discord.gg` that waits for HELLO (op 10) and closes without ever
+   sending IDENTIFY, so no session is consumed. Runs at boot (`[GATEWAY] probe`) and
+   in `--doctor` (`[ok] gateway websocket — HELLO in 132ms`). It answers the one
+   question REST cannot: is the WebSocket path open at all?
+7. **No more idle workers**: an empty token or a throwing eris-sharder constructor
+   in a worker now logs `[FATAL]` and `process.exit(1)` (the master re-forks and the
+   crash-loop detector fires) instead of leaving a healthy-looking process with no
+   client. A rejected `connect()` is logged instead of vanishing as an unhandled
+   rejection.
+8. `[SHARD] plan: cluster 0 → worker 1, shards 0~0` shows what eris-sharder actually
+   assigned, and `--doctor` prints the DNS order, the gateway probe, the DEBUG
+   explanation, the source fingerprint and the shard/intent/identity checks.
+
+Tests: `test/gatewaySupervisor.test.js` (14). Suite 172/172.
+
 ## "Valid token, permanently OFFLINE" — duplicated `Bot ` prefix, no way to prove which source runs
 
 This pass went below the log lines that were already in place and checked what the

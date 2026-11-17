@@ -33,6 +33,8 @@ const intentsUtil = require('./intents.js');
 const gatewayCodes = require('./gatewayCodes.js');
 const presenceUtil = require('./presence.js');
 const tokenUtil = require('./token.js');
+const discordDns = require('./discordDns.js');
+const gatewayProbe = require('./gatewayProbe.js');
 
 const OK = 'ok  ';
 const FAIL = 'FAIL';
@@ -372,6 +374,45 @@ async function collect(options = {}) {
 		);
 	}
 
+	// --- DNS lookup order ----------------------------------------------------
+	// `ws` (the gateway) has no Happy Eyeballs: on a host with a broken IPv6
+	// route REST works and the gateway hangs forever. Show the order the bot will
+	// actually use, and apply it here so the probe below is representative.
+	const dnsApplied = discordDns.apply(env);
+	push(
+		INFO,
+		'dns lookup order',
+		`${dnsApplied.order || 'default'}` +
+			(dnsApplied.order === 'ipv4first'
+				? ' (gateway prefers IPv4; GATEWAY_IPV4_FIRST=false to change)'
+				: '')
+	);
+
+	// --- gateway websocket reachability (no IDENTIFY, no session) -----------
+	if (options.probeGateway) {
+		const result = await gatewayProbe.probe({ env, timeoutMs: options.probeTimeoutMs || 10000 });
+		if (result.ok) {
+			push(OK, 'gateway websocket', gatewayProbe.describe(result));
+		} else {
+			push(
+				FAIL,
+				'gateway websocket',
+				`${gatewayProbe.describe(result)} — REST can be fine while this fails: the gateway is ` +
+					'gateway.discord.gg over a raw ws/tls socket (no Happy Eyeballs, no proxy support)'
+			);
+		}
+	}
+
+	// --- DEBUG mode does not touch the gateway -------------------------------
+	if (String(env.DEBUG || '').toLowerCase() === 'true') {
+		push(
+			INFO,
+			'DEBUG and the gateway',
+			'DEBUG only limits which guilds are answered (and forces one shard/cluster); it never ' +
+				'changes the token, intents or connection path. Set DEBUG=false for production'
+		);
+	}
+
 	// --- real gateway login (opt in: opens a session) ------------------------
 	if (options.connect) {
 		if (!env.BOT_TOKEN) {
@@ -483,6 +524,13 @@ function format(checks) {
 }
 
 async function run(options = {}) {
+	// The CLI probes the gateway by default: it is the only check that proves the
+	// WebSocket path works, and it never sends IDENTIFY. GATEWAY_PROBE_ON_BOOT=false
+	// (or --no-probe) skips it.
+	if (options.probeGateway === undefined) {
+		// `--no-probe` skips it (e.g. on a host whose egress is known to be closed).
+		options.probeGateway = !process.argv.includes('--no-probe');
+	}
 	const checks = await collect(options);
 	const { text, failed } = format(checks);
 	// eslint-disable-next-line no-console
