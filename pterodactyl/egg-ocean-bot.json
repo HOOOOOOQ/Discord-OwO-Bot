@@ -75,6 +75,46 @@
 			"user_editable": true,
 			"rules": "nullable|integer|min:1|max:1000",
 			"field_type": "text"
+		},
+		{
+			"name": "Bot Status",
+			"description": "Status presence di Discord: online | idle | dnd | invisible. Nilai default online. Jangan pakai invisible kalau ingin bot terlihat online.",
+			"env_variable": "BOT_STATUS",
+			"default_value": "online",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|string|in:online,idle,dnd,invisible",
+			"field_type": "text"
+		},
+		{
+			"name": "Bot Activity",
+			"description": "Tipe aktivitas: playing | watching | listening | competing | streaming | custom.",
+			"env_variable": "BOT_ACTIVITY_TYPE",
+			"default_value": "playing",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|string|in:playing,watching,listening,competing,streaming,custom",
+			"field_type": "text"
+		},
+		{
+			"name": "Activity Text",
+			"description": "Teks aktivitas. Placeholder: {guilds} {users} {shards} {prefix}. Contoh: \"o help | {guilds} servers\".",
+			"env_variable": "BOT_ACTIVITY_TEXT",
+			"default_value": "o help",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|string|max:128",
+			"field_type": "text"
+		},
+		{
+			"name": "Presence Refresh (seconds)",
+			"description": "Terapkan ulang presence tiap N detik. 0 = hanya saat ready. Isi 600 kalau memakai placeholder {guilds}/{users}.",
+			"env_variable": "BOT_PRESENCE_REFRESH_SEC",
+			"default_value": "0",
+			"user_viewable": true,
+			"user_editable": true,
+			"rules": "required|integer|min:0|max:86400",
+			"field_type": "text"
 		}
 	]
 }

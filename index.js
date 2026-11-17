@@ -31,8 +31,9 @@ if (process.argv.includes('--verify')) {
 // intents, shard source, DATABASE_URL/REDIS_URL reachability) and exits. It
 // never starts a shard, so it is safe to run on a live panel.
 if (process.argv.includes('--doctor')) {
+	// --connect additionally performs a real gateway login (opens a session).
 	require('./src/utils/doctor.js')
-		.run()
+		.run({ connect: process.argv.includes('--connect') })
 		.then((ok) => process.exit(ok ? 0 : 1))
 		.catch((err) => {
 			// eslint-disable-next-line no-console
@@ -55,7 +56,11 @@ errors.installProcessHandlers();
 
 // Grab tokens and secret files
 const debug = config.debug;
-if (!debug) require('dd-trace').init();
+// dd-trace is a optional tracing agent: on a 2 GB panel it costs tens of MB of
+// RSS for no benefit. Set DD_TRACE_ENABLED=false to skip loading it entirely.
+if (!debug && String(process.env.DD_TRACE_ENABLED || 'true').toLowerCase() !== 'false') {
+	require('dd-trace').init();
+}
 
 const rateLimitUtil = require('./utils/rateLimitUtil.js');
 // Eris-Sharder

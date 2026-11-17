@@ -1,5 +1,29 @@
 # FIXLOG
 
+## Presence, gateway login test, and 24/7 hardening
+
+- **Presence is applied by the bot itself** (`src/utils/presence.js`), on every
+  `ready` and after a shard `resume`. Env: `BOT_STATUS`, `BOT_ACTIVITY_TYPE`
+  (playing/watching/listening/competing/streaming/custom), `BOT_ACTIVITY_TEXT`
+  with `{guilds}`/`{users}`/`{shards}`/`{prefix}`, `BOT_ACTIVITY_URL`,
+  `BOT_PRESENCE_REFRESH_SEC`. Upstream only set a status when its private
+  sharder server replied, so self-hosted bots connected with a blank presence.
+- **`ready` now prints the online marker** with identity, guild/shard counts,
+  status and activity, followed by a plain `Bot is online.` line for panel
+  operators. The `bot ready` prefix that the egg/healthcheck greps for is kept.
+- **`node index.js --doctor --connect`** performs a real gateway login
+  (`src/utils/doctor.js`), proving token + intents actually work, then
+  disconnects. Doctor also reports the resolved presence and warns about
+  `invisible`/invalid values.
+- **Worker crashes self-heal**: eris-sharder re-forks a dead cluster
+  (`cluster N died … Restarting`); documented so operators don't restart the
+  whole panel server.
+- **Resource knobs**: `DD_TRACE_ENABLED=false` skips dd-trace entirely
+  (tens of MB of RSS), documented `CLUSTERS`/`NODE_OPTIONS`/`LOG_LEVEL` tuning.
+- Egg gains `BOT_STATUS`, `BOT_ACTIVITY_TYPE`, `BOT_ACTIVITY_TEXT`,
+  `BOT_PRESENCE_REFRESH_SEC`; `.env.example`, DEPLOYMENT, README and
+  PTERODACTYL (online checklist, presence, 24/7, optimization) updated.
+
 ## Self-hosting boot: shards without upstream's sharder server, intents, diagnostics
 
 - **Shard allocation no longer requires `SHARDER_HOST`** (an upstream-private

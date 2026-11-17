@@ -46,11 +46,21 @@ ignore every command. `ERIS_MESSAGE_CONTENT` controls how the bot treats it:
 whole intent bitmask use `ERIS_INTENTS` (names or numbers, e.g.
 `allNonPrivileged,messageContent`).
 
+Presence (status dot + activity line) is configured with `BOT_STATUS`,
+`BOT_ACTIVITY_TYPE`, `BOT_ACTIVITY_TEXT` (`{guilds}`/`{users}`/`{shards}`/
+`{prefix}` placeholders), `BOT_ACTIVITY_URL` for streaming, and
+`BOT_PRESENCE_REFRESH_SEC` to re-apply it periodically. It is applied on every
+`ready` and after a shard resumes, so no external service is involved.
+
 Run the self-check at any time:
 
 ```bash
-node index.js --doctor    # token, intents, shard source, DATABASE_URL/REDIS_URL reachability
+node index.js --doctor             # token, intents, presence, shard source, DB/Redis reachability
+node index.js --doctor --connect   # additionally performs a real gateway login (stop the bot first)
 ```
+
+`DD_TRACE_ENABLED=false` skips loading dd-trace and saves tens of MB of RSS on
+small panels.
 
 `PREFIX` sets the bot-wide default prefix and defaults to `o` (the bot is called
 **OCEAN**; `sharder.name` in `src/data/config.json` and the `< OCEAN … >` help
@@ -111,8 +121,12 @@ Startup logs tell you what was decided:
 discord: token ok — Ocean#5352 (id 1571…)
 discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
 shard config: shards 0~0 of 1 (Discord's recommendation)
-bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
+Bot is online. Commands accept the prefix "o" (try "ohelp")
 ```
+
+A cluster that dies is forked again by eris-sharder (`cluster 0 died … Restarting`),
+so shard crashes self-heal while the master process keeps running.
 
 If the token is rejected, the intent is disabled, or a shard disconnects, the
 log now says so explicitly (e.g. `4004` = bad token, `4014` = disallowed intent)

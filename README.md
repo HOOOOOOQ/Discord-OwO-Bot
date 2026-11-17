@@ -45,8 +45,14 @@ Two things bite self-hosters, and both are checked at startup:
   upstream-private service; leave it empty and the shard count comes from
   Discord's recommendation (`SHARDS`/`SHARD_FIRST`/`SHARD_LAST` override).
 
+Presence is set on every `ready`: `BOT_STATUS` (`online|idle|dnd|invisible`),
+`BOT_ACTIVITY_TYPE` (`playing|watching|listening|competing|streaming|custom`),
+`BOT_ACTIVITY_TEXT` (supports `{guilds}`, `{users}`, `{shards}`, `{prefix}`) and
+`BOT_PRESENCE_REFRESH_SEC`.
+
 ```bash
-node index.js --doctor    # token, intents, shard source, DB/Redis reachability
+node index.js --doctor             # token, intents, presence, shard source, DB/Redis
+node index.js --doctor --connect   # real gateway login (stop the bot first)
 ```
 
 Docker (bot + MariaDB + Redis) is available but optional:

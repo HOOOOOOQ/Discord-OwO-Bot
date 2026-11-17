@@ -7,6 +7,7 @@
 
 // Fired when all shards turn ready
 const log = require('../utils/log.js');
+const presence = require('../utils/presence.js');
 
 exports.handle = function () {
 	this.logger.logstashQos('ready');
@@ -18,9 +19,28 @@ exports.handle = function () {
 		  }`
 		: 'unknown user';
 	const guilds = bot.guilds ? bot.guilds.size : 0;
+	const users = bot.users ? bot.users.size : 0;
+
+	// Presence first: this is the "green dot" a self-hoster looks for in Discord.
+	const applied = presence.apply(bot, {
+		counts: { guilds, users, shards: bot.shards ? bot.shards.size : 1, prefix: this.prefix },
+	});
+
 	// Readiness marker: readers (Docker healthcheck, Pterodactyl startup
-	// detection) look for this line to know the bot is actually connected.
-	log.info(`bot ready: ${tag} in ${guilds} guild(s), shard ${this.global.getShardString()}`);
+	// detection, scripts/healthcheck.js) look for "bot ready" to know the bot is
+	// actually connected.
+	log.info(
+		`bot ready: ${tag} in ${guilds} guild(s), shard ${this.global.getShardString()} — ONLINE ` +
+			`(status ${applied.status}, ${presence.describe(applied.activity)})`
+	);
+	log.info(
+		'Bot is online. Commands accept the prefix "' +
+			this.prefix +
+			'" (try "' +
+			this.prefix +
+			'help")'
+	);
+
 	if (this.debug) {
 		log.warn('bot ready: DEBUG mode is on — only DEBUG_WHITELIST guilds are answered');
 	}
@@ -30,4 +50,7 @@ exports.handle = function () {
 				'https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot&permissions=8'
 		);
 	}
+
+	// Keeps {guilds}/{users} templates fresh; no-op unless BOT_PRESENCE_REFRESH_SEC>0.
+	if (!this.__presenceRefresh) this.__presenceRefresh = presence.startRefresh(this);
 };

@@ -339,6 +339,130 @@ Command `o stats` dan `o shards` juga tetap jalan tanpa sharder server (dihitung
 dari proses ini), dan `InfoUpdater`/`updateShardInfo` tidak lagi memanggil
 endpoint yang tidak ada.
 
+## 9a. Checklist "bot benar-benar ONLINE"
+
+Jalankan berurutan. Setiap langkah punya bukti di console.
+
+**1. Token valid.** Developer Portal → aplikasi kamu → **Bot** → _Reset Token_
+kalau ragu, lalu salin ke `BOT_TOKEN` (jangan pakai tanda kutip).
+
+**2. MESSAGE CONTENT INTENT ON.** Developer Portal → **Bot** → _Privileged
+Gateway Intents_ → **MESSAGE CONTENT INTENT** → Save. Tanpa ini bot online tapi
+tidak pernah menjawab command.
+
+**3. Bot di-invite.** Kalau belum:
+`https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot&permissions=8`
+(tukar `<application id>` dengan _Application ID_, bukan token).
+
+**4. Startup Command = `node index.js`.** Jangan `npm start` berkali-kali di
+Startup Command — Pterodactyl menjalankan satu perintah saja.
+
+**5. Start server**, lalu cari log ini:
+
+```
+discord: token ok — Ocean#5352 (id …)
+discord: application OCEAN (id …); MESSAGE CONTENT INTENT enabled
+shard config: shards 0~0 of 1 (Discord's recommendation)
+Creating shards 0~0 out of 1 total shards!
+[Cluster 0] Connecting with 1 shard(s)
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
+Bot is online. Commands accept the prefix "o" (try "ohelp")
+```
+
+Baris `bot ready` adalah penanda yang dipakai egg (`config.startup.done`), jadi
+setelah baris itu panel menandai server **running** dan bot tampil online.
+
+**6. Uji di Discord:** `ohelp`, lalu `oping`. Kalau `ohelp` diam padahal baris
+`bot ready` muncul: intent belum ON, atau `DEBUG=true` tanpa `DEBUG_WHITELIST`
+yang benar, atau bot tidak punya izin _Read Messages/Send Messages_ di channel
+itu.
+
+**7. Verifikasi login gateway (opsional, paling meyakinkan):**
+
+```
+node index.js --doctor --connect
+```
+
+Perintah ini benar-benar login ke gateway, mencetak
+`[ok] gateway login — connected as Ocean#5352 … the bot can appear online`, lalu
+disconnect. **Hentikan server dulu** — dua koneksi dengan token yang sama akan
+saling menendang (duplicate login).
+
+---
+
+## 9e. Presence (status) dan aktivitas
+
+Bot sekarang memasang presence sendiri setiap kali `ready`, jadi tidak lagi
+bergantung pada server sharder upstream. Semua lewat environment:
+
+```ini
+BOT_STATUS=online          # online | idle | dnd | invisible
+BOT_ACTIVITY_TYPE=playing  # playing | watching | listening | competing | streaming | custom
+BOT_ACTIVITY_TEXT=o help   # placeholder: {guilds} {users} {shards} {prefix}
+BOT_ACTIVITY_URL=          # wajib kalau type=streaming
+BOT_PRESENCE_REFRESH_SEC=0 # >0 = perbarui berkala (mis. 600)
+```
+
+Contoh:
+
+| Konfigurasi                                           | Tampilan di Discord      |
+| ----------------------------------------------------- | ------------------------ |
+| `BOT_ACTIVITY_TYPE=playing`, text `o help`            | **Playing** o help       |
+| `BOT_ACTIVITY_TYPE=watching`, text `{guilds} servers` | **Watching** 1 servers   |
+| `BOT_ACTIVITY_TYPE=listening`, text `o help`          | **Listening to** o help  |
+| `BOT_ACTIVITY_TYPE=custom`, text `o help`             | **Custom Status** o help |
+| `BOT_ACTIVITY_TYPE=streaming` + `BOT_ACTIVITY_URL`    | **Live on Twitch** …     |
+
+Catatan:
+
+- `BOT_STATUS=invisible` membuat bot **terlihat offline** meskipun prosesnya
+  jalan. Jangan dipakai saat mengejar "harus online".
+- `streaming` tanpa `BOT_ACTIVITY_URL` otomatis turun ke `playing` (Discord
+  menolak streaming tanpa URL).
+- Presence dipasang ulang otomatis setelah shard `resume`, jadi tidak hilang
+  setelah gateway reconnect.
+
+---
+
+## 9f. 24/7 di Pterodactyl
+
+1. **Crash cluster ditangani sendiri.** eris-sharder memfork ulang worker yang
+   mati (`Cluster Manager | cluster 0 died … Restarting`); proses master tetap
+   hidup sehingga bot kembali online tanpa campur tangan panel.
+2. **Proses master mati = server offline di panel.** Pterodactyl tidak punya
+   auto-restart untuk proses yang exit. Solusi:
+   - Start server setelah node/daemon restart — Wings otomatis menyalakan server
+     yang sebelumnya dalam status _running_ saat node dimatikan normal.
+   - Buat **Schedule** di panel (Schedule → New Task, mis. tiap 6 jam) dengan
+     aksi **Restart Server** sebagai jaring pengaman. Jangan lebih sering dari
+     1×/jam: setiap restart memakai jatah _identify_ gateway (1000/hari).
+   - Panel **tidak** butuh Discord/Termux: selama server panel hidup, bot
+     berjalan sendiri.
+3. **Duplicate login.** Satu token hanya boleh jalan di satu tempat. Kalau bot
+   tiba-tiba offline bersamaan dengan munculnya instance lain (panel lain,
+   Termux, laptop), matikan yang lain — kalau tidak, keduanya saling tendang dan
+   terlihat seperti "reconnect loop".
+4. **Reconnect loop.** Kalau log berulang `disconnected: 4004` atau `4014`,
+   itu bukan loop jaringan tetapi token/intent yang salah — perbaiki dulu.
+
+---
+
+## 9g. Optimasi RAM/CPU di panel kecil (2 GB)
+
+| Setelan                    | Rekomendasi                | Alasan                                                              |
+| -------------------------- | -------------------------- | ------------------------------------------------------------------- |
+| `CLUSTERS`                 | `1`–`2`                    | tiap cluster proses Node penuh (~120–200 MB). Default repo 60 = OOM |
+| `DD_TRACE_ENABLED`         | `false`                    | agent tracing dd-trace memakan puluhan MB tanpa manfaat di panel    |
+| `SHARDS`                   | kosong                     | biar Discord menentukan; jangan paksa lebih besar dari perlu        |
+| `BOT_PRESENCE_REFRESH_SEC` | `0`                        | refresh presence terlalu sering = request gateway tambahan          |
+| `NODE_OPTIONS` (opsional)  | `--max-old-space-size=384` | membatasi heap V8 supaya GC jalan lebih awal                        |
+| `LOG_LEVEL`                | `info`                     | `debug` menghasilkan ribuan baris dan memperlambat panel            |
+
+Cek pemakaian dari console panel: `Memory` normalnya 120–250 MB untuk 1–2
+cluster. Kalau mendekati batas, turunkan `CLUSTERS` dulu sebelum menaikkan RAM.
+
+---
+
 ## 9b. canvas opsional — bot jalan tanpa memegen
 
 `canvas` sekarang ada di **`optionalDependencies`**. Artinya kalau host tidak
