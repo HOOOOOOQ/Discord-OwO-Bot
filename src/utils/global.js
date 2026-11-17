@@ -26,8 +26,14 @@ try {
 	goodwords = require('../../../tokens/goodwords.json');
 } catch (err) {
 	console.error('Could not find goodwords.json, attempting to use ./secret file...');
-	goodwords = require('../../secret/goodwords.json');
-	console.log('Found goodwords.json file in secret folder!');
+	try {
+		goodwords = require('../../secret/goodwords.json');
+		console.log('Found goodwords.json file in secret folder!');
+	} catch (secretErr) {
+		// Both copies missing: filtering still works, just without the whitelist.
+		goodwords = [];
+		console.error('goodwords.json is missing — the profanity whitelist is empty');
+	}
 }
 filter2.removeWords(goodwords);
 const namor = require('namor');

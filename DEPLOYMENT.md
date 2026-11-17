@@ -118,12 +118,25 @@ mode a single shard/cluster is started.
 Startup logs tell you what was decided:
 
 ```
+[BOOT] OCEAN starting — node v20.x, pid 123, CLUSTERS=2
+[SHARD] shards 0~0 of 1 (Discord's recommendation)
+[CONFIG] prefix=o debug=false clusters=2 shards=1 intents=130813
 discord: token ok — Ocean#5352 (id 1571…)
 discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
-shard config: shards 0~0 of 1 (Discord's recommendation)
+[CLUSTER] worker 1 forked / [CLUSTER] worker 1 online
+[GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+[GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
+[SHARD] shard 0 READY after 412ms
+[GATEWAY] all shards READY — 1 shard(s), 1 guild(s)
 bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
 Bot is online. Commands accept the prefix "o" (try "ohelp")
+[HEALTH] OCEAN IS ONLINE — Ocean#5352
 ```
+
+eris identifies with `presence.status = "offline"` unless the application sets it
+before connecting, which is why `src/utils/gatewayBoot.js` writes the presence
+before `connect()` and `src/utils/readyState.js` replays the ready handler once
+(eris-sharder loads the app from inside its own `ready` listener).
 
 A cluster that dies is forked again by eris-sharder (`cluster 0 died … Restarting`),
 so shard crashes self-heal while the master process keeps running.
