@@ -25,11 +25,14 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 
+const buildInfo = require('./buildInfo.js');
+const gatewayBoot = require('./gatewayBoot.js');
 const discordApi = require('./discordApi.js');
 const dbUrl = require('./dbUrl.js');
 const intentsUtil = require('./intents.js');
 const gatewayCodes = require('./gatewayCodes.js');
 const presenceUtil = require('./presence.js');
+const tokenUtil = require('./token.js');
 
 const OK = 'ok  ';
 const FAIL = 'FAIL';
@@ -104,7 +107,7 @@ function gatewayLogin(token, options = {}) {
 			resolve(result);
 		};
 
-		const client = new Eris(`Bot ${token}`, {
+		const client = new Eris(tokenUtil.botAuth(token), {
 			intents,
 			autoreconnect: false,
 			compress: false,
@@ -118,11 +121,22 @@ function gatewayLogin(token, options = {}) {
 					title: 'gateway login',
 					detail: `no READY inside ${Math.round(
 						timeoutMs / 1000
-					)}s — network blocked or Discord slow`,
+					)}s — reached: ${gatewayBoot.phaseSummary()}`,
 				}),
 			timeoutMs
 		);
 		if (typeof timer.unref === 'function') timer.unref();
+
+		// Trace the real packets so the report shows where a login stopped even
+		// when no READY ever arrives (HELLO without IDENTIFY = wrong token shape,
+		// IDENTIFY without READY = intents/shards rejected).
+		client.on('connect', (id) => {
+			try {
+				if (client.shards && client.shards.get) gatewayBoot.instrumentShard(client.shards.get(id));
+			} catch (err) {
+				/* tracing is best effort */
+			}
+		});
 
 		client.on('ready', () => {
 			const user = client.user;
@@ -131,21 +145,28 @@ function gatewayLogin(token, options = {}) {
 				title: 'gateway login',
 				detail:
 					`connected as ${user ? discordApi.formatUser(user) : 'unknown'} ` +
-					`in ${client.guilds.size} guild(s), ${client.shards.size} shard(s) — the bot can appear online`,
+					`in ${client.guilds.size} guild(s), ${client.shards.size} shard(s) — the bot can appear online` +
+					` | ${gatewayBoot.phaseSummary()}`,
 			});
 		});
 		client.on('error', (err) => {
-			const code = err && (err.code || err.closeCode);
+			const code = gatewayBoot.closeCodeOf(err);
 			finish({
 				level: FAIL,
 				title: 'gateway login',
-				detail: `${err && err.message}${code ? ` (${gatewayCodes.describe(code)})` : ''}`,
+				detail:
+					`${err && err.message}${code ? ` (${gatewayCodes.describe(code)})` : ''}` +
+					` | reached: ${gatewayBoot.phaseSummary()}`,
 			});
 		});
 		client.on('disconnect', (err) => {
-			const code = err && err.code;
+			const code = gatewayBoot.closeCodeOf(err);
 			if (code === 1000 || code === 1001) return; // normal close after ready
-			finish({ level: FAIL, title: 'gateway login', detail: gatewayCodes.describe(code) });
+			finish({
+				level: FAIL,
+				title: 'gateway login',
+				detail: `${gatewayCodes.describe(code)} | reached: ${gatewayBoot.phaseSummary()}`,
+			});
 		});
 
 		Promise.resolve()
@@ -160,6 +181,26 @@ async function collect(options = {}) {
 	const probe = options.probe || probeTcp;
 	const checks = [];
 	const push = (level, title, detail) => checks.push({ level, title, detail });
+
+	// --- source fingerprint --------------------------------------------------
+	// Pterodactyl runs whatever sits in /home/container: uploading a zip and
+	// pressing Start does not replace old files. These hashes are what the panel
+	// console prints as `[BOOT] running build <id>` — if they differ, the panel and
+	// this check are running different code, which no log can reveal.
+	push(
+		INFO,
+		'source build',
+		`${buildInfo.fingerprint({ root: options.root })} (compare: [BOOT] running build …)`
+	);
+	for (const entry of buildInfo.snapshot({ root: options.root })) {
+		// Informational on purpose: a missing file is already a hard FAIL further
+		// down (macro/words), here it only pins *which* source tree is being run.
+		push(
+			INFO,
+			`source ${entry.file}`,
+			entry.hash === 'MISSING' ? 'MISSING — not present in this checkout' : entry.hash
+		);
+	}
 
 	// --- runtime ------------------------------------------------------------
 	const nodeMajor = major(process.versions.node);
@@ -178,6 +219,21 @@ async function collect(options = {}) {
 		push(FAIL, 'BOT_TOKEN', 'not set — add it to .env (or the panel variables)');
 	} else {
 		push(INFO, 'BOT_TOKEN', `set (${maskToken(env.BOT_TOKEN)})`);
+		const tokenInfo = tokenUtil.strip(env.BOT_TOKEN);
+		if (tokenInfo.changed) {
+			push(
+				WARN,
+				'BOT_TOKEN format',
+				`the value needed normalising (${tokenUtil
+					.describeChanges(tokenInfo)
+					.join(
+						', '
+					)}) — replace the panel variable with the bare token; a "Bot " prefix used to produce 4004 on the gateway`
+			);
+		}
+		if (!tokenInfo.token) {
+			push(FAIL, 'BOT_TOKEN', 'empty after normalisation — the panel variable is blank');
+		}
 		const user = await api.getCurrentUser(env.BOT_TOKEN);
 		if (user.ok) {
 			push(OK, 'token accepted by Discord', api.formatUser(user.data));

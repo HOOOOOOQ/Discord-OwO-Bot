@@ -8,6 +8,7 @@
 // Fired when all shards turn ready
 const log = require('../utils/log.js');
 const presence = require('../utils/presence.js');
+const gatewayBoot = require('../utils/gatewayBoot.js');
 
 exports.handle = function () {
 	this.logger.logstashQos('ready');
@@ -25,6 +26,12 @@ exports.handle = function () {
 	const applied = presence.apply(bot, {
 		counts: { guilds, users, shards: bot.shards ? bot.shards.size : 1, prefix: this.prefix },
 	});
+	if (applied.activity !== null) {
+		gatewayBoot.markPhase(
+			'PRESENCE_SYNCHRONIZED',
+			`status=${applied.status} ${presence.describe(applied.activity)}`
+		);
+	}
 
 	// Readiness marker: readers (Docker healthcheck, Pterodactyl startup
 	// detection, scripts/healthcheck.js) look for "bot ready" to know the bot is

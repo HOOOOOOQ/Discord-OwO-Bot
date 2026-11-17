@@ -67,6 +67,8 @@ const rateLimitUtil = require('./utils/rateLimitUtil.js');
 const Sharder = require('eris-sharder').Master;
 const cluster = require('cluster');
 const { resolveShardConfig, describe: describeShardConfig } = require('./src/utils/shardConfig.js');
+const buildInfo = require('./src/utils/buildInfo.js');
+const tokenUtil = require('./src/utils/token.js');
 const diagnostics = require('./src/utils/diagnostics.js');
 
 var shards, firstShardID, lastShardID;
@@ -85,17 +87,35 @@ var shards, firstShardID, lastShardID;
  */
 function watchWorkers() {
 	const exits = [];
-	cluster.on('fork', (worker) => log.info(`[CLUSTER] worker ${worker.id} forked`));
+	const forkedAt = new Map();
+	let respawns = 0;
+	cluster.on('fork', (worker) => {
+		forkedAt.set(worker.id, Date.now());
+		respawns++;
+		const suffix = respawns > 1 ? ` (respawn #${respawns - 1})` : '';
+		log.info(`[CLUSTER] worker ${worker.id} forked${suffix}`);
+	});
 	cluster.on('online', (worker) => log.info(`[CLUSTER] worker ${worker.id} online`));
 	cluster.on('exit', (worker, code, signal) => {
 		const now = Date.now();
+		const startedAt = forkedAt.get(worker.id);
+		forkedAt.delete(worker.id);
 		exits.push(now);
 		while (exits.length && now - exits[0] > 60000) exits.shift();
+		const uptime = startedAt ? `${now - startedAt}ms` : 'unknown time';
 		log.warn(
 			`[CLUSTER] worker ${worker.id} exited (code ${code}, signal ${
 				signal || 'none'
-			}) — eris-sharder restarts it`
+			}) after ${uptime} — eris-sharder restarts it`
 		);
+		if (startedAt && now - startedAt < 10000) {
+			log.error(
+				`[ERROR] worker ${worker.id} died ${
+					now - startedAt
+				}ms after fork — it never had time to reach READY. ` +
+					'The failure is above this line (token/intents/secret files/DATABASE_URL), not in the gateway.'
+			);
+		}
 		if (exits.length >= 4) {
 			log.error(
 				`[ERROR] crash loop: ${exits.length} worker exits in 60s. The cluster never stays up, so the bot cannot be online.`
@@ -113,7 +133,12 @@ function watchWorkers() {
 			// Must run before eris-sharder creates the client: eris defaults to
 			// presence "offline" inside IDENTIFY, and the worker has no listeners
 			// until READY. See src/utils/gatewayBoot.js.
-			require('./src/utils/gatewayBoot.js').install();
+			const gatewayBoot = require('./src/utils/gatewayBoot.js');
+			const instrumented = gatewayBoot.install();
+			log.info(
+				`[BOOT] worker ${process.pid} mode confirmed (cluster.isWorker=true), ` +
+					`gateway instrumentation installed=${instrumented}, ${buildInfo.describe()}`
+			);
 		}
 
 		// Worker clusters receive their shard range over IPC from the master, so
@@ -123,6 +148,9 @@ function watchWorkers() {
 		if (cluster.isMaster) {
 			log.info(
 				`[BOOT] OCEAN starting — node ${process.version}, pid ${process.pid}, CLUSTERS=${config.clusters}`
+			);
+			log.info(
+				`[BOOT] running ${buildInfo.describe()} (compare this with: node index.js --doctor)`
 			);
 			if (debug) {
 				shards = 1;
@@ -175,8 +203,26 @@ function watchWorkers() {
 			);
 		}
 
-		// Start sharder
-		const sharder = new Sharder('Bot ' + process.env.BOT_TOKEN, config.sharder.path, {
+		// Start sharder. A panel value pasted as `Bot <token>` used to become
+		// `Bot Bot <token>` and the gateway closed with 4004 — REST checks still
+		// passed because discordApi normalised the header, so the bot looked
+		// "valid but offline". One prefix, always (src/utils/token.js).
+		const tokenInfo = tokenUtil.strip(process.env.BOT_TOKEN);
+		// Only the master reports it: eris-sharder constructs its Master in every
+		// process, so both would otherwise print the same warning.
+		if (tokenInfo.changed && cluster.isMaster) {
+			log.warn(
+				`[CONFIG] BOT_TOKEN normalised — ${tokenUtil
+					.describeChanges(tokenInfo)
+					.join(', ')}; replace the panel variable with just the token`
+			);
+		}
+		if (!tokenInfo.token) {
+			log.error('[CONFIG] BOT_TOKEN is empty after normalisation — set it in the panel variables');
+			process.exitCode = 1;
+			return;
+		}
+		const sharder = new Sharder(tokenUtil.botAuth(process.env.BOT_TOKEN), config.sharder.path, {
 			name: config.sharder.name,
 			clientOptions: config.eris.clientOptions,
 			debug: true,

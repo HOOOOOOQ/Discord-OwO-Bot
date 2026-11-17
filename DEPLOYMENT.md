@@ -119,15 +119,22 @@ Startup logs tell you what was decided:
 
 ```
 [BOOT] OCEAN starting — node v20.x, pid 123, CLUSTERS=2
+[BOOT] running build 2cbdd6c728b1 (compare this with: node index.js --doctor)
 [SHARD] shards 0~0 of 1 (Discord's recommendation)
 [CONFIG] prefix=o debug=false clusters=2 shards=1 intents=130813
 discord: token ok — Ocean#5352 (id 1571…)
 discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
 [CLUSTER] worker 1 forked / [CLUSTER] worker 1 online
 [GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+[STATE] HELLO_RECEIVED — shard=0 heartbeat_interval=41250ms
 [GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
+[STATE] IDENTIFY_SENT — shard=0 intents=130813 presence=online shard=[0/1]
+[STATE] HEARTBEAT_ACKNOWLEDGED — shard=0
+[STATE] READY_RECEIVED — shard=0 Ocean guilds=1 session=abcdef12…
 [SHARD] shard 0 READY after 412ms
 [GATEWAY] all shards READY — 1 shard(s), 1 guild(s)
+[STATE] BOT_ONLINE — 1 shard(s), 1 guild(s)
+[STATE] PRESENCE_SYNCHRONIZED — status=online playing "o help"
 bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
 Bot is online. Commands accept the prefix "o" (try "ohelp")
 [HEALTH] OCEAN IS ONLINE — Ocean#5352
@@ -137,6 +144,24 @@ eris identifies with `presence.status = "offline"` unless the application sets i
 before connecting, which is why `src/utils/gatewayBoot.js` writes the presence
 before `connect()` and `src/utils/readyState.js` replays the ready handler once
 (eris-sharder loads the app from inside its own `ready` listener).
+
+The `[STATE]` rows come from real gateway packets (`Shard#sendWS` for IDENTIFY,
+shard-local `rawWS` for HELLO / HEARTBEAT_ACK / READY), so a run that stops after
+`HELLO_RECEIVED` never reaches IDENTIFY (token/network), and one that stops after
+`IDENTIFY_SENT` was rejected by Discord (4004 token, 4014 privileged intent,
+4010/4011 shard config). `BOT_ONLINE` is only printed by the client `ready`
+event, i.e. when eris has every shard ready — never from process liveness.
+
+`BOT_TOKEN` is normalised by `src/utils/token.js`: a value pasted as
+`Bot <token>`, wrapped in quotes, or saved with a trailing newline is corrected
+(it used to reach the gateway as `Bot Bot <token>` and get closed with 4004 while
+`--doctor`'s REST checks still passed), and the panel prints
+`[CONFIG] BOT_TOKEN normalised — …`. Store the bare token anyway.
+
+`[BOOT] running build <id>` is a fingerprint of the gateway-critical files. Run
+`node index.js --doctor` on the same host: `[info] source build` must print the
+same id. If it does not, the panel is running old files — upload, **extract**, then
+start.
 
 A cluster that dies is forked again by eris-sharder (`cluster 0 died … Restarting`),
 so shard crashes self-heal while the master process keeps running.

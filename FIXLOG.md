@@ -1,5 +1,48 @@
 # FIXLOG
 
+## "Valid token, permanently OFFLINE" — duplicated `Bot ` prefix, no way to prove which source runs
+
+This pass went below the log lines that were already in place and checked what the
+installed libraries actually do with the values the panel supplies.
+
+- **The gateway token was prefixed unconditionally.** `index.js` built the sharder
+  client with `new Sharder('Bot ' + process.env.BOT_TOKEN, …)`, because Discord's
+  docs show the REST header as `Bot <token>`. `src/utils/discordApi.js` meanwhile
+  normalised the header (`Bot ` added only if missing), so a panel variable saved
+  as `Bot MTIz…` passed every REST check in `--doctor` and still made the socket
+  send `Bot Bot MTIz…`, which Discord closes with **4004 Authentication failed**.
+  Result: token "valid", clusters up, worker alive, and the bot never online.
+  Fix: `src/utils/token.js` (`strip` / `botAuth` / `describeChanges`) is now the
+  single place a token becomes a header; `index.js`, `discordApi.js` and the
+  doctor's `--connect` login all use it. A modified value is reported as
+  `[CONFIG] BOT_TOKEN normalised — …` and as a `[warn] BOT_TOKEN format` row,
+  never with the token itself.
+- **Packet-level gateway state machine** in `src/utils/gatewayBoot.js`, using only
+  APIs that exist in eris 0.17.2: `Shard#sendWS` (IDENTIFY / RESUME / HEARTBEAT)
+  and the shard-local `rawWS` event (HELLO, HEARTBEAT_ACK, DISPATCH READY/RESUMED,
+  INVALID_SESSION, RECONNECT). States are appended as they are observed —
+  `HELLO_RECEIVED → IDENTIFY_SENT → HEARTBEAT_ACKNOWLEDGED → READY_RECEIVED →
+BOT_ONLINE → PRESENCE_SYNCHRONIZED` — and printed as `[STATE] …`. A shard READY
+  never sets `BOT_ONLINE`; that belongs to the client `ready` event (all shards).
+  Nothing is printed as a state that was not actually observed.
+- **`rawWS` is shard-local** (eris emits it on the shard, and only when a listener
+  exists), so the shards are instrumented right after `connect()` spawns them, and
+  again on `shardReady` so a respawned shard is re-traced.
+- **Build fingerprint** (`src/utils/buildInfo.js`): sha256 (10 chars) of
+  `package.json`, `index.js`, `src/owo.js`, `src/utils/{config,gatewayBoot,presence,readyState,intents,shardConfig}.js`,
+  `src/eventHandlers/ready.js`, `src/data/config.json`. Printed at boot
+  (`[BOOT] running build …`, and in the worker as `[BOOT] worker … installed=true,
+build …`) and by `--doctor` (`[info] source build` + one row per file). This is
+  the only way to tell "new code failed" from "old code is still running", which
+  a Pterodactyl panel makes very easy to hit (upload ≠ extract ≠ start).
+- **Crash context**: `[FATAL]` lines now report how long after READY the process
+  died plus the observed gateway timeline, and the master logs
+  `[CLUSTER] worker N exited … after Nms` and calls out a worker that dies within
+  10 s of fork (`never had time to reach READY`).
+- **`--doctor --connect`** reports the real packet timeline in every outcome
+  (success, close code, timeout), so a login that stops after HELLO is visible.
+- Tests: `test/gatewayStates.test.js` (8), `test/token.test.js` (8). Suite 158/158.
+
 ## Root cause of "server RUNNING, bot OFFLINE" — presence inside IDENTIFY
 
 - **eris defaults to `presence.status = "offline"`** (`node_modules/eris/lib/Client.js`) and `Shard#identify` sends that object verbatim (`if (this.presence.status) identify.presence = this.presence`). Upstream only changed it through its private sharder server, so a self-hosted cluster reached READY and still displayed **offline**.
