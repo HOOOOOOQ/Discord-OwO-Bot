@@ -26,6 +26,8 @@ const net = require('net');
 const discordApi = require('./discordApi.js');
 const dbUrl = require('./dbUrl.js');
 const intentsUtil = require('./intents.js');
+const gatewayCodes = require('./gatewayCodes.js');
+const presenceUtil = require('./presence.js');
 
 const OK = 'ok  ';
 const FAIL = 'FAIL';
@@ -61,6 +63,92 @@ function probeTcp(host, port, timeoutMs = 3000) {
 		socket.once('connect', () => finish({ ok: true }));
 		socket.once('timeout', () => finish({ ok: false, error: `timeout after ${timeoutMs}ms` }));
 		socket.once('error', (err) => finish({ ok: false, error: err.code || err.message }));
+	});
+}
+
+/**
+ * Performs a real gateway login (`--doctor --connect`). This is the only check
+ * that proves the bot can actually appear online: a valid token with a disabled
+ * privileged intent only fails at IDENTIFY time.
+ *
+ * Stop the server first — two connections with the same token invalidate each
+ * other's session.
+ */
+function gatewayLogin(token, options = {}) {
+	const timeoutMs = options.timeoutMs || 25000;
+	const intents = intentsUtil.resolveIntents({ env: options.env || process.env }).value;
+	let Eris;
+	try {
+		Eris = require('eris');
+	} catch (err) {
+		return Promise.resolve({
+			level: FAIL,
+			title: 'gateway login',
+			detail: `eris is not installed (${err.message})`,
+		});
+	}
+
+	return new Promise((resolve) => {
+		let settled = false;
+		const finish = (result) => {
+			if (settled) return;
+			settled = true;
+			if (timer) clearTimeout(timer);
+			try {
+				client.disconnect({ reconnect: false });
+			} catch (err) {
+				/* already gone */
+			}
+			resolve(result);
+		};
+
+		const client = new Eris(`Bot ${token}`, {
+			intents,
+			autoreconnect: false,
+			compress: false,
+			messageLimit: 1,
+		});
+
+		const timer = setTimeout(
+			() =>
+				finish({
+					level: WARN,
+					title: 'gateway login',
+					detail: `no READY inside ${Math.round(
+						timeoutMs / 1000
+					)}s — network blocked or Discord slow`,
+				}),
+			timeoutMs
+		);
+		if (typeof timer.unref === 'function') timer.unref();
+
+		client.on('ready', () => {
+			const user = client.user;
+			finish({
+				level: OK,
+				title: 'gateway login',
+				detail:
+					`connected as ${user ? discordApi.formatUser(user) : 'unknown'} ` +
+					`in ${client.guilds.size} guild(s), ${client.shards.size} shard(s) — the bot can appear online`,
+			});
+		});
+		client.on('error', (err) => {
+			const code = err && (err.code || err.closeCode);
+			finish({
+				level: FAIL,
+				title: 'gateway login',
+				detail: `${err && err.message}${code ? ` (${gatewayCodes.describe(code)})` : ''}`,
+			});
+		});
+		client.on('disconnect', (err) => {
+			const code = err && err.code;
+			if (code === 1000 || code === 1001) return; // normal close after ready
+			finish({ level: FAIL, title: 'gateway login', detail: gatewayCodes.describe(code) });
+		});
+
+		Promise.resolve()
+			.then(() => client.connect())
+			.catch((err) => finish({ level: FAIL, title: 'gateway login', detail: err.message }));
 	});
 }
 
@@ -209,6 +297,26 @@ async function collect(options = {}) {
 		}
 	}
 
+	// --- presence ------------------------------------------------------------
+	const presence = presenceUtil.resolve(env);
+	push(
+		INFO,
+		'presence',
+		`${presence.status} — ${presence.type} "${presence.text}"` +
+			(presence.refreshMs ? ` (refresh every ${presence.refreshMs / 1000}s)` : '')
+	);
+	for (const warning of presence.warnings) push(WARN, 'presence', warning);
+
+	// --- real gateway login (opt in: opens a session) ------------------------
+	if (options.connect) {
+		if (!env.BOT_TOKEN) {
+			push(FAIL, 'gateway login', 'BOT_TOKEN is not set');
+		} else {
+			const login = await gatewayLogin(env.BOT_TOKEN, { env });
+			push(login.level, login.title, login.detail);
+		}
+	}
+
 	// --- storage -------------------------------------------------------------
 	const mysql = dbUrl.resolveMysql(env);
 	const redis = dbUrl.resolveRedis(env);
@@ -260,4 +368,4 @@ async function run(options = {}) {
 	return failed === 0;
 }
 
-module.exports = { collect, format, run, maskToken, probeTcp };
+module.exports = { collect, format, run, gatewayLogin, maskToken, probeTcp };

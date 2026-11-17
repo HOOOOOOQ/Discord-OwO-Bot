@@ -103,3 +103,70 @@ test('the report ends with a summary line', async () => {
 	const { text } = doctor.format(checks);
 	assert.match(text, /\d+ checks, 0 failed, \d+ warning\(s\)/);
 });
+
+// --- gateway login probe --------------------------------------------------
+
+function withFakeEris(behaviour, fn) {
+	const path = require.resolve('eris');
+	const previous = require.cache[path];
+	const EventEmitter = require('node:events');
+	class FakeEris extends EventEmitter {
+		constructor(token, options) {
+			super();
+			this.token = token;
+			this.options = options;
+			this.user = { id: '1', username: 'Ocean', discriminator: '5352' };
+			this.guilds = { size: 1 };
+			this.shards = { size: 1 };
+			this.disconnected = [];
+			FakeEris.last = this;
+		}
+		connect() {
+			return behaviour(this);
+		}
+		disconnect(options) {
+			this.disconnected.push(options || {});
+		}
+	}
+	require.cache[path] = { id: path, filename: path, loaded: true, exports: FakeEris };
+	try {
+		return fn(FakeEris);
+	} finally {
+		if (previous) require.cache[path] = previous;
+		else delete require.cache[path];
+	}
+}
+
+test('gateway login reports a successful connection and disconnects', async () => {
+	const result = await withFakeEris(
+		async (client) => {
+			setImmediate(() => client.emit('ready'));
+		},
+		() => doctor.gatewayLogin('token', { env: {} })
+	);
+	assert.strictEqual(result.level, 'ok  ');
+	assert.match(result.detail, /Ocean#5352/);
+	assert.match(result.detail, /1 guild/);
+});
+
+test('gateway login reports disallowed intents (4014) instead of hanging', async () => {
+	const result = await withFakeEris(
+		async (client) => {
+			setImmediate(() => client.emit('disconnect', { code: 4014 }));
+		},
+		() => doctor.gatewayLogin('token', { env: {} })
+	);
+	assert.strictEqual(result.level, 'FAIL');
+	assert.match(result.detail, /disallowed intents/i);
+});
+
+test('gateway login reports an invalid token (4004)', async () => {
+	const result = await withFakeEris(
+		async (client) => {
+			setImmediate(() => client.emit('disconnect', { code: 4004 }));
+		},
+		() => doctor.gatewayLogin('token', { env: {} })
+	);
+	assert.strictEqual(result.level, 'FAIL');
+	assert.match(result.detail, /authentication failed/i);
+});
