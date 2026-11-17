@@ -43,6 +43,12 @@ if (process.argv.includes('--doctor')) {
 	return;
 }
 
+// Gateway sockets (ws -> net/tls) do not do Happy Eyeballs, so a host with a
+// broken IPv6 route hangs on AAAA while REST keeps working. Set the lookup
+// order before anything can open a socket. See src/utils/discordDns.js.
+const discordDns = require('./src/utils/discordDns.js');
+const dnsResult = discordDns.apply(process.env);
+
 // Config file (environment overrides applied inside the loader)
 const config = require('./src/utils/config.js');
 const log = require('./src/utils/log.js');
@@ -69,6 +75,8 @@ const cluster = require('cluster');
 const { resolveShardConfig, describe: describeShardConfig } = require('./src/utils/shardConfig.js');
 const buildInfo = require('./src/utils/buildInfo.js');
 const tokenUtil = require('./src/utils/token.js');
+const gatewayProbe = require('./src/utils/gatewayProbe.js');
+const gatewayBoot = require('./src/utils/gatewayBoot.js');
 const diagnostics = require('./src/utils/diagnostics.js');
 
 var shards, firstShardID, lastShardID;
@@ -125,6 +133,59 @@ function watchWorkers() {
 	});
 }
 
+/**
+ * Gateway supervision from the master's side.
+ *
+ * The worker reports each startup stage over IPC (`oceanStage`), so the panel
+ * shows the timeline even if the worker's own stdout is lost. If no worker ever
+ * reports connect(), the master says so explicitly: a worker that is "online" is
+ * not a bot that is online.
+ */
+function superviseGateway(workerCount) {
+	const startedAt = Date.now();
+	const stages = new Map();
+	cluster.on('message', (worker, message) => {
+		if (!message || message.name !== 'oceanStage') return;
+		if (stages.has(message.stage)) return;
+		stages.set(message.stage, { workerId: worker.id, at: message.at, detail: message.detail });
+		log.info(
+			`[CLUSTER] worker ${worker.id} gateway stage ${message.stage}` +
+				(message.detail ? ` — ${message.detail}` : '')
+		);
+	});
+
+	const timeoutMs = gatewayBoot.connectTimeoutMs(process.env) + 5000;
+	const timer = setTimeout(() => {
+		if (stages.has('ready_received')) return;
+		const table = gatewayBoot.STARTUP_STAGES.map(
+			(stage) =>
+				`${stage}=${stages.has(stage) ? `${stages.get(stage).at - startedAt}ms` : 'NOT REACHED'}`
+		);
+		if (!stages.has('connect_called')) {
+			log.error('[GATEWAY] CONNECTION NOT STARTED (master view)');
+			log.error(
+				`[DIAG] ${workerCount} worker(s) forked, none reported connect(); a worker "online" only means ` +
+					'the process exists.'
+			);
+			if (!stages.has('ipc_connect_received')) {
+				log.error(
+					'[DIAG] No worker received the shard assignment over IPC — eris-sharder never sent "connect", ' +
+						'so no Eris client was created anywhere.'
+				);
+			}
+		} else if (!stages.has('websocket_open')) {
+			log.error('[GATEWAY] WEBSOCKET NOT OPENED (master view)');
+		} else {
+			log.error('[GATEWAY] READY TIMEOUT (master view)');
+		}
+		log.error(`[DIAG] stages: ${table.join(' | ')}`);
+		log.error(
+			'[ACTION] node index.js --doctor (gateway probe, DNS order, shard plan) on this host'
+		);
+	}, timeoutMs);
+	if (typeof timer.unref === 'function') timer.unref();
+}
+
 (async () => {
 	try {
 		if (cluster.isWorker) {
@@ -133,8 +194,22 @@ function watchWorkers() {
 			// Must run before eris-sharder creates the client: eris defaults to
 			// presence "offline" inside IDENTIFY, and the worker has no listeners
 			// until READY. See src/utils/gatewayBoot.js.
-			const gatewayBoot = require('./src/utils/gatewayBoot.js');
 			const instrumented = gatewayBoot.install();
+			// Watch the shard assignment itself: eris-sharder only creates the Eris
+			// client when the master sends the "connect" message over IPC. If that
+			// message never arrives the worker used to idle forever with no log at
+			// all — indistinguishable from "connected but offline".
+			process.prependListener('message', (message) => {
+				if (message && message.name === 'connect') {
+					gatewayBoot.state.clusterId = message.id;
+					gatewayBoot.markStage(
+						'ipc_connect_received',
+						`cluster ${message.id}, shards ${message.firstShardID}~${message.lastShardID} of ${message.maxShards}`
+					);
+				}
+			});
+			gatewayBoot.state.clusterId = 0;
+			gatewayBoot.armStartupWatchdog(process.env);
 			log.info(
 				`[BOOT] worker ${process.pid} mode confirmed (cluster.isWorker=true), ` +
 					`gateway instrumentation installed=${instrumented}, ${buildInfo.describe()}`
@@ -152,6 +227,21 @@ function watchWorkers() {
 			log.info(
 				`[BOOT] running ${buildInfo.describe()} (compare this with: node index.js --doctor)`
 			);
+			log.info(
+				`[BOOT] dns lookup order=${dnsResult.order || 'default'}` +
+					(dnsResult.reason ? ` (${dnsResult.reason})` : '')
+			);
+			if ((process.env.GATEWAY_PROBE_ON_BOOT || 'true').toLowerCase() !== 'false') {
+				// Proves the WebSocket path to gateway.discord.gg works before any shard
+				// exists. It never sends IDENTIFY, so no session is consumed.
+				gatewayProbe
+					.probe({ env: process.env })
+					.then((result) => {
+						if (result.ok) log.info(`[GATEWAY] probe: ${gatewayProbe.describe(result)}`);
+						else log.error(`[GATEWAY] probe failed: ${gatewayProbe.describe(result)}`);
+					})
+					.catch((err) => log.debug(`[GATEWAY] probe crashed: ${err.message}`));
+			}
 			if (debug) {
 				shards = 1;
 				firstShardID = 0;
@@ -219,21 +309,66 @@ function watchWorkers() {
 		}
 		if (!tokenInfo.token) {
 			log.error('[CONFIG] BOT_TOKEN is empty after normalisation — set it in the panel variables');
+			if (cluster.isWorker) {
+				// A worker that returns here stays alive with no client and no log,
+				// which looks exactly like "connected but offline". Exit so the master
+				// re-forks it and the crash-loop detector reports the real reason.
+				log.error('[FATAL] worker cannot start without a token — exiting (code 1)');
+				process.exit(1);
+			}
 			process.exitCode = 1;
 			return;
 		}
-		const sharder = new Sharder(tokenUtil.botAuth(process.env.BOT_TOKEN), config.sharder.path, {
-			name: config.sharder.name,
-			clientOptions: config.eris.clientOptions,
-			debug: true,
-			shards,
-			clusters: config.clusters,
-			firstShardID,
-			lastShardID,
-		});
+		let sharder;
+		try {
+			sharder = new Sharder(tokenUtil.botAuth(process.env.BOT_TOKEN), config.sharder.path, {
+				name: config.sharder.name,
+				clientOptions: config.eris.clientOptions,
+				debug: true,
+				shards,
+				clusters: config.clusters,
+				firstShardID,
+				lastShardID,
+			});
+		} catch (err) {
+			log.error(`[FATAL] eris-sharder Master constructor threw: ${err && err.message}`);
+			log.error(err);
+			// In a worker this used to fall through to an idle process with no Eris
+			// client at all — the exact "worker online, gateway never starts"
+			// signature. Exit so the master re-forks and the crash loop is reported.
+			if (cluster.isWorker) process.exit(1);
+			throw err;
+		}
+
+		if (cluster.isWorker) {
+			gatewayBoot.markStage('sharder_constructed', `path ${config.sharder.path}`);
+			log.info(
+				'[BOOT] eris-sharder Master constructed in the worker — waiting for the shard assignment over IPC'
+			);
+		}
 
 		if (cluster.isMaster) {
 			watchWorkers();
+			superviseGateway(config.clusters);
+			// eris-sharder fills its cluster map inside process.nextTick, so the plan is
+			// only complete a moment later.
+			const planTimer = setTimeout(() => {
+				if (!sharder || !sharder.clusters || !sharder.clusters.size) {
+					log.warn('[SHARD] eris-sharder created no clusters');
+					return;
+				}
+				const plan = [...sharder.clusters.entries()]
+					.map(([id, info]) => {
+						const range =
+							info.firstShardID === undefined
+								? 'no shard assigned'
+								: `${info.firstShardID}~${info.lastShardID}`;
+						return `cluster ${id} → worker ${info.workerID}, shards ${range}`;
+					})
+					.join(', ');
+				log.info(`[SHARD] plan: ${plan}`);
+			}, 500);
+			if (typeof planTimer.unref === 'function') planTimer.unref();
 			rateLimitUtil.init(sharder.bucket, debug);
 			errors.registerShutdownHook(async () => {
 				log.info('Master shutting down, letting clusters exit');

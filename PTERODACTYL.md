@@ -290,11 +290,20 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 > ```
 > [BOOT] OCEAN starting — node v20.x, pid 123, CLUSTERS=2
 > [BOOT] running build 2cbdd6c728b1 (compare this with: node index.js --doctor)
+> [BOOT] dns lookup order=ipv4first
+> [GATEWAY] probe: HELLO in 132ms (heartbeat 41250ms) — the gateway is reachable
 > [SHARD] shards 0~0 of 1 (SHARDS env)
 > [CONFIG] prefix=o debug=false clusters=2 shards=1 intents=130813
 > [DISCORD] authentication successful — Ocean#5352 (id 1571…)
 > [CLUSTER] worker 1 forked
 > [CLUSTER] worker 1 online
+> [GATEWAY] stage process_started — pid 2519 isWorker=true
+> [BOOT] worker 2519 mode confirmed (cluster.isWorker=true), gateway instrumentation installed=true, build 2cbdd6c728b1
+> [GATEWAY] stage sharder_constructed — path /src/owo.js
+> [CLUSTER] worker 1 gateway stage sharder_constructed — path /src/owo.js
+> [GATEWAY] stage ipc_connect_received — cluster 0, shards 0~0 of 1
+> [SHARD] plan: cluster 0 → worker 1, shards 0~0
+> [GATEWAY] stage connect_called — Client at 9ms
 > [GATEWAY] connecting with presence online — playing "o help" (attempt 1)
 > [STATE] HELLO_RECEIVED — shard=0 heartbeat_interval=41250ms
 > [GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
@@ -391,6 +400,24 @@ Bandingkan sidik jari build:
 Kalau angkanya beda, panel masih memakai file lama: extract ulang arsipnya
 (timpa semua file), lalu Start. Tanpa perbandingan ini tidak ada log yang bisa
 membedakan "kode baru gagal" dari "kode lama masih jalan".
+
+**7. Worker hidup tapi gateway tidak pernah mulai.** Ini yang paling menipu:
+`[CLUSTER] worker 1 online` hanya berarti prosesnya ada. Sejak versi ini setiap
+tahap startup dicetak, dan kalau macet dalam 15 detik panel akan menyebut tahap
+yang tidak pernah tercapai:
+
+| Baris terakhir yang terlihat             | Artinya                                                                 | Yang harus dilakukan                                                                |
+| ---------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `[BOOT] worker …` lalu tidak ada apa pun | master tidak mengirim pesan `connect` (IPC)                             | `[GATEWAY] CONNECTION NOT STARTED` + `[DIAG]` akan muncul; kirim log itu            |
+| `[GATEWAY] CONNECTION NOT STARTED`       | tidak ada Eris client / `connect()` tidak pernah dipanggil              | lihat baris `[DIAG]` tepat di bawahnya (apakah `ipc_connect_received` ada)          |
+| `[GATEWAY] WEBSOCKET NOT OPENED`         | `connect()` jalan tapi socket ke Discord tidak pernah terbuka           | DNS/IPv6 atau egress 443 diblokir — jalankan `node index.js --doctor` (baris probe) |
+| `[GATEWAY] READY TIMEOUT`                | socket terbuka, tapi Discord tidak menyelesaikan IDENTIFY/READY         | lihat kode close: 4004 token, 4014 intent, 4010/4011 shard                          |
+| `[GATEWAY] probe failed: …` (saat boot)  | WebSocket ke `gateway.discord.gg` gagal padahal REST (`discord.com`) OK | host menutup WebSocket keluar / IPv6 rusak: biarkan `GATEWAY_IPV4_FIRST=true`       |
+
+`--doctor` sekarang juga membuka WebSocket ke gateway (tanpa IDENTIFY, jadi tidak
+memakai session) dan mencetak `[ok] gateway websocket — HELLO in 132ms`. Kalau baris
+itu `[FAIL]`, masalahnya **jaringan host**, bukan token: REST tetap bisa sukses
+sementara socket gateway tidak pernah terbuka.
 
 Kalau butuh semua jawaban sekaligus, jalankan `node index.js --doctor`.
 

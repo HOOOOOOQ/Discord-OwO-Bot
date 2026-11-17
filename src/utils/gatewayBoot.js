@@ -55,6 +55,22 @@ const GATEWAY_OPCODES = {
 	HEARTBEAT_ACK: 11,
 };
 
+// Startup stages a worker must pass through before Discord can see it. Every
+// one of them is set by a real signal (IPC message, patched connect, socket
+// event, gateway packet) — never by a timer or by process liveness.
+const STARTUP_STAGES = [
+	'process_started',
+	'sharder_constructed',
+	'ipc_connect_received',
+	'connect_called',
+	'websocket_open',
+	'hello_received',
+	'identify_sent',
+	'ready_received',
+];
+
+const DEFAULT_CONNECT_TIMEOUT_MS = 15000;
+
 const state = {
 	clients: 0,
 	readyEvents: 0,
@@ -67,22 +83,196 @@ const state = {
 	readySeenAt: null,
 	presenceSyncedAt: null,
 	shards: new Set(),
+	// ---- startup supervisor (worker) -------------------------------------
+	stages: new Map(),
+	startedAt: Date.now(),
+	connectCalled: false,
+	websocketOpened: false,
+	lastPacket: null,
+	lastError: null,
+	clusterId: null,
+	watchdogArmed: false,
+	watchdogReported: false,
 };
 
 /** Records and logs one observed gateway transition. */
 function markPhase(stage, detail) {
 	const entry = { stage, at: Date.now(), detail: detail || null };
+	state.lastPacket = stage;
+	const stageOfPhase = {
+		HELLO_RECEIVED: 'hello_received',
+		IDENTIFY_SENT: 'identify_sent',
+		READY_RECEIVED: 'ready_received',
+	};
 	state.phases.push(entry);
 	if (state.phases.length > 200) state.phases.shift();
 	if (stage === 'READY_RECEIVED') state.readySeenAt = entry.at;
 	if (stage === 'PRESENCE_SYNCHRONIZED') state.presenceSyncedAt = entry.at;
 	log.info(`[STATE] ${stage}${detail ? ` — ${detail}` : ''}`);
+	if (stageOfPhase[stage]) markStage(stageOfPhase[stage], detail);
 	return entry;
 }
 
 function phaseSummary() {
 	if (!state.phases.length) return 'no gateway events observed';
 	return state.phases.map((entry) => entry.stage).join(' → ');
+}
+
+function connectTimeoutMs(env = process.env) {
+	const parsed = Number.parseInt(env.GATEWAY_CONNECT_TIMEOUT_MS, 10);
+	if (Number.isInteger(parsed) && parsed > 0) return parsed;
+	return DEFAULT_CONNECT_TIMEOUT_MS;
+}
+
+function hasStage(stage) {
+	return state.stages.has(stage);
+}
+
+/** First stage that was never reached, or null when the worker got to READY. */
+function firstMissingStage() {
+	for (const stage of STARTUP_STAGES) {
+		if (!state.stages.has(stage)) return stage;
+	}
+	return null;
+}
+
+function stageTable() {
+	return STARTUP_STAGES.map((stage) => {
+		const entry = state.stages.get(stage);
+		return `${stage}=${entry ? `${entry.at - state.startedAt}ms` : 'NOT REACHED'}`;
+	});
+}
+
+/**
+ * Records one observed startup stage. `detail` is short, never contains the
+ * token. Forwarded to the master as an IPC beacon so the panel shows the worker
+ * timeline even when the worker's own stdout is lost.
+ */
+function markStage(stage, detail) {
+	if (!stage || state.stages.has(stage)) return;
+	state.stages.set(stage, { at: Date.now(), detail: detail || null });
+	if (stage === 'connect_called') state.connectCalled = true;
+	if (stage === 'websocket_open') state.websocketOpened = true;
+	log.info(`[GATEWAY] stage ${stage}${detail ? ` — ${detail}` : ''}`);
+	reportStage(stage, detail);
+}
+
+function reportStage(stage, detail) {
+	try {
+		if (process.send && (process.env.OCEAN_STAGE_BEACONS || 'true').toLowerCase() !== 'false') {
+			process.send({
+				name: 'oceanStage',
+				stage,
+				detail: detail || null,
+				pid: process.pid,
+				at: Date.now(),
+			});
+		}
+	} catch (err) {
+		/* master gone: the local watchdog still reports */
+	}
+}
+
+/** Human-readable dump used by the startup watchdog and by --doctor. */
+function diagnosticSnapshot(extra = {}) {
+	return {
+		pid: process.pid,
+		clusterId:
+			extra.clusterId === undefined
+				? state.clusterId === null || state.clusterId === undefined
+					? '?'
+					: state.clusterId
+				: extra.clusterId,
+		shard:
+			extra.shard === undefined
+				? state.lastPacket === null
+					? '?'
+					: state.lastPacket
+				: extra.shard,
+		stages: stageTable(),
+		firstMissing: firstMissingStage(),
+		connectCalled: state.connectCalled,
+		websocketOpened: state.websocketOpened,
+		clients: state.clients,
+		lastPacket: state.lastPacket,
+		lastError: state.lastError,
+		elapsedMs: Date.now() - state.startedAt,
+		phases: phaseSummary(),
+	};
+}
+
+function formatDiagnostics(snapshot) {
+	return [
+		`[DIAG] worker pid=${snapshot.pid} cluster=${snapshot.clusterId} elapsed=${Math.round(
+			snapshot.elapsedMs / 1000
+		)}s`,
+		`[DIAG] client created=${
+			snapshot.connectCalled ? 'yes' : 'unknown/not yet'
+		}; connect() called=${snapshot.connectCalled}`,
+		`[DIAG] websocket open=${snapshot.websocketOpened}; last gateway packet=${
+			snapshot.lastPacket || 'none'
+		}`,
+		`[DIAG] stages: ${snapshot.stages.join(' | ')}`,
+		`[DIAG] last error: ${snapshot.lastError || 'none'}`,
+	];
+}
+
+/**
+ * The watchdog the user asked for: if the worker is alive but never starts a
+ * gateway connection, say exactly that — with the stage table — instead of
+ * sitting silent forever.
+ */
+function armStartupWatchdog(env = process.env, options = {}) {
+	if (state.watchdogArmed) return;
+	state.watchdogArmed = true;
+	const timeoutMs = options.timeoutMs || connectTimeoutMs(env);
+	const timer = setTimeout(() => {
+		if (state.readySeenAt || state.watchdogReported) return;
+		state.watchdogReported = true;
+		const snapshot = diagnosticSnapshot();
+		snapshot.elapsedMs = Date.now() - state.startedAt;
+		if (!state.connectCalled) {
+			log.error('[GATEWAY] CONNECTION NOT STARTED');
+			log.error('[DIAG] Worker is alive but no Gateway connection was initiated.');
+			log.error('[DIAG] Check Eris client initialization and connect() execution.');
+			if (!state.stages.has('ipc_connect_received')) {
+				log.error(
+					'[DIAG] The shard assignment (IPC "connect" message) was never received from the master — ' +
+						'eris-sharder never created an Eris client in this worker.'
+				);
+			} else if (!state.stages.has('sharder_constructed')) {
+				log.error(
+					'[DIAG] The shard assignment arrived but eris-sharder did not finish initialising.'
+				);
+			} else {
+				log.error(
+					'[DIAG] The shard assignment arrived but Eris Client#connect() was never invoked — ' +
+						'the failure is inside Cluster.connect(), not in the gateway.'
+				);
+			}
+		} else if (!state.websocketOpened) {
+			log.error('[GATEWAY] WEBSOCKET NOT OPENED');
+			log.error(
+				'[DIAG] connect() ran but no socket reached Discord — DNS/IPv6, blocked egress on 443 or a ' +
+					'proxy are the usual causes; run node index.js --doctor for the gateway probe.'
+			);
+		} else {
+			log.error('[GATEWAY] READY TIMEOUT');
+			log.error(
+				'[DIAG] The socket opened but Discord did not complete IDENTIFY/READY — see the close code ' +
+					'above (4004 token, 4014 privileged intent, 4010/4011 shard config).'
+			);
+		}
+		for (const line of formatDiagnostics(snapshot)) log.error(line);
+		log.error(
+			'[ACTION] run: node index.js --doctor (and --connect with the server stopped) on this host, ' +
+				'then compare [info] source build with the [BOOT] running build line'
+		);
+		reportStage('watchdog_fired', `first_missing=${snapshot.firstMissing}`);
+	}, timeoutMs);
+	if (typeof timer.unref === 'function') timer.unref();
+	log.debug(`[GATEWAY] startup watchdog armed (${timeoutMs}ms)`);
+	return timer;
 }
 
 /** eris turns a close frame into `new Error("4004: Authentication failed")`. */
@@ -248,6 +438,8 @@ function attachLogging(client, options = {}) {
 	if (typeof timer.unref === 'function') timer.unref();
 
 	client.on('connect', (id) => {
+		state.websocketOpened = true;
+		markStage('websocket_open', `shard ${id}`);
 		log.info(`[GATEWAY] shard ${id} socket open — sent IDENTIFY, waiting for READY`);
 	});
 
@@ -289,6 +481,7 @@ function attachLogging(client, options = {}) {
 
 	client.on('error', (err) => {
 		state.lastErrorMessage = (err && err.message) || String(err);
+		state.lastError = state.lastErrorMessage;
 		const code = closeCodeOf(err);
 		if (code !== null) state.lastCloseCode = code;
 		log.error(`[GATEWAY] error: ${state.lastErrorMessage}`);
@@ -322,6 +515,11 @@ function install(options = {}) {
 		log.warn(`[GATEWAY] instrumentation skipped: eris is not installed (${err.message})`);
 		return false;
 	}
+	state.startedAt = state.startedAt || Date.now();
+	if (!state.stages.size) {
+		// Armed in every process; the worker is the one that must reach READY.
+		markStage('process_started', `pid ${process.pid} isWorker=${require('cluster').isWorker}`);
+	}
 	const proto = Eris.Client && Eris.Client.prototype;
 	if (!proto || typeof proto.connect !== 'function') {
 		log.warn('[GATEWAY] instrumentation skipped: unsupported eris build');
@@ -352,12 +550,33 @@ function install(options = {}) {
 		} catch (err) {
 			log.warn(`[GATEWAY] lifecycle logging unavailable (${err.message})`);
 		}
-		const connected = originalConnect.apply(this, args);
+		markStage(
+			'connect_called',
+			`${this.constructor ? this.constructor.name : 'Client'} at ${Date.now() - state.startedAt}ms`
+		);
+		let connected;
+		try {
+			connected = originalConnect.apply(this, args);
+		} catch (err) {
+			state.lastError = err && err.message;
+			log.error(`[GATEWAY] connect() threw synchronously: ${state.lastError}`);
+			return Promise.reject(err);
+		}
 		// connect() spawns the shards; rawWS is emitted on the shard, never on the
-		// client, so the shards can only be traced once they exist.
+		// client, so the shards can only be traced once they exist. A rejected
+		// connect() (e.g. /gateway unreachable through the synced REST handler) used
+		// to disappear as an unhandled rejection.
 		Promise.resolve(connected)
 			.then(() => instrumentClientShards(this))
-			.catch(() => {});
+			.catch((err) => {
+				state.lastError = (err && err.message) || String(err);
+				log.error(`[GATEWAY] connect() rejected: ${state.lastError}`);
+				log.error(
+					'[DIAG] eris could not even resolve the gateway URL / start the shard manager — ' +
+						'this is usually REST (/gateway) or the SyncedRequestHandler, not the socket'
+				);
+				markStage('connect_failed', state.lastError);
+			});
 		return connected;
 	};
 	proto.__oceanGatewayPatched = true;
@@ -368,6 +587,7 @@ function install(options = {}) {
 
 module.exports = {
 	GATEWAY_OPCODES,
+	STARTUP_STAGES,
 	install,
 	identifyPresence,
 	attachLogging,
@@ -377,5 +597,15 @@ module.exports = {
 	phaseSummary,
 	closeCodeOf,
 	readyTimeoutMs,
+	//
+	markStage,
+	hasStage,
+	firstMissingStage,
+	stageTable,
+	diagnosticSnapshot,
+	formatDiagnostics,
+	armStartupWatchdog,
+	connectTimeoutMs,
+	reportStage,
 	state,
 };
