@@ -104,13 +104,23 @@ class OwO extends Base {
 		// Date utility
 		this.dateUtil = require('./utils/dateUtil.js');
 
-		// Hidden macro detection file
+		// Hidden macro detection file. `secret/macro.js` ships an empty stub, but a
+		// deployment that strips secret/ would crash the cluster here — after the
+		// gateway READY — so there is a safe last-resort fallback.
 		try {
 			this.macro = require('./../../tokens/macro.js');
 		} catch (err) {
 			log.warn('Could not find tokens/macro.js, attempting to use ./secret file...');
-			this.macro = require('../secret/macro.js');
-			log.info('Found macro.js file in secret folder!');
+			try {
+				this.macro = require('../secret/macro.js');
+				log.info('Found macro.js file in secret folder!');
+			} catch (secretErr) {
+				this.macro = require('./utils/macroFallback.js');
+				log.error(
+					'macro.js is missing (tokens/macro.js and secret/macro.js) — using the no-op fallback. ' +
+						'Anti-macro/captcha checks are DISABLED for this deployment.'
+				);
+			}
 		}
 		// canvas is optional (native build); keep the macro bootstrap working on
 		// hosts without it instead of crashing the cluster at startup.
@@ -146,8 +156,14 @@ class OwO extends Base {
 			this.badwords = require('./../../tokens/badwords.json');
 		} catch (err) {
 			log.warn('Could not find tokens/badwords.json, attempting to use ./secret file...');
-			this.badwords = require('../secret/badwords.json');
-			log.info('Found badwords.json file in secret folder!');
+			try {
+				this.badwords = require('../secret/badwords.json');
+				log.info('Found badwords.json file in secret folder!');
+			} catch (secretErr) {
+				// A missing word list must not take the whole cluster down.
+				this.badwords = [];
+				log.error('badwords.json is missing — profanity filtering loads an empty list');
+			}
 		}
 
 		this.giveaway = require('./utils/giveaway.js');
@@ -160,6 +176,12 @@ class OwO extends Base {
 	launch() {
 		// Bind bot events
 		this.eventHandler = new EventHandler(this);
+		// The client is already READY when eris-sharder loads this file (it calls
+		// loadCode from its own `ready` listener), so replay that event once.
+		if (require('./utils/readyState.js').needsReplay(this, this.bot)) {
+			log.info('[BOOT] cluster loaded after gateway READY — replaying the ready handler');
+			this.eventHandler.replayReady();
+		}
 
 		// sends info to our main server every X seconds
 		this.InfoUpdater = new (require('./utils/InfoUpdater.js'))(this);

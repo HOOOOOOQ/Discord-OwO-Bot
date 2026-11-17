@@ -170,3 +170,73 @@ test('gateway login reports an invalid token (4004)', async () => {
 	assert.strictEqual(result.level, 'FAIL');
 	assert.match(result.detail, /authentication failed/i);
 });
+
+// --- required files / presence ---------------------------------------------
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+function tempProject(files) {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-doctor-'));
+	for (const [relative, content] of Object.entries(files)) {
+		const target = path.join(root, relative);
+		fs.mkdirSync(path.dirname(target), { recursive: true });
+		fs.writeFileSync(target, content);
+	}
+	return root;
+}
+
+const PROJECT_FILES = {
+	'secret/macro.js': 'exports.bind = function () {};\nexports.check = async () => true;\n',
+	'secret/badwords.json': '["owo"]',
+	'secret/goodwords.json': '[]',
+};
+
+test('the public checkout satisfies the required-file checks', async () => {
+	const checks = await doctor.collect({
+		env: { ...HEALTHY_ENV },
+		api: fakeApi(),
+		probe: reachable,
+	});
+	const fileChecks = checks.filter((check) => /macro module|words\.json/.test(check.title));
+	assert.strictEqual(fileChecks.length, 3);
+	assert.ok(
+		fileChecks.every((check) => check.level === 'ok  '),
+		JSON.stringify(fileChecks)
+	);
+});
+
+test('a stripped secrets folder is reported as a fatal cluster crash', async () => {
+	const root = tempProject({});
+	const checks = await doctor.collect({
+		env: { ...HEALTHY_ENV },
+		api: fakeApi(),
+		probe: reachable,
+		root,
+	});
+	const fail = failures(checks);
+	assert.strictEqual(fail.length, 3);
+	assert.ok(fail.some((check) => /macro module/.test(check.title)));
+	assert.ok(fail.some((check) => /badwords\.json/.test(check.title)));
+	assert.ok(fail.some((check) => /goodwords\.json/.test(check.title)));
+	assert.ok(fail.every((check) => /crash|throw/.test(check.detail)));
+});
+
+test('an invalid macro module is caught before it crashes the cluster', async () => {
+	const root = tempProject({ ...PROJECT_FILES, 'secret/macro.js': 'exports.nothing = 1;' });
+	const checks = await doctor.collect({
+		env: { ...HEALTHY_ENV },
+		api: fakeApi(),
+		probe: reachable,
+		root,
+	});
+	const fail = failures(checks);
+	assert.ok(fail.some((check) => /does not export bind/.test(check.detail)));
+});
+
+test('BOT_STATUS=invisible is called out: a healthy bot would look offline', async () => {
+	const checks = await collect({ BOT_STATUS: 'invisible' });
+	const fail = failures(checks);
+	assert.ok(fail.some((check) => /invisible/.test(check.detail)));
+});

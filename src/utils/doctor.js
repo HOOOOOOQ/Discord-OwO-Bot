@@ -21,7 +21,9 @@
  * secrets.
  */
 
+const fs = require('fs');
 const net = require('net');
+const path = require('path');
 
 const discordApi = require('./discordApi.js');
 const dbUrl = require('./dbUrl.js');
@@ -306,6 +308,13 @@ async function collect(options = {}) {
 			(presence.refreshMs ? ` (refresh every ${presence.refreshMs / 1000}s)` : '')
 	);
 	for (const warning of presence.warnings) push(WARN, 'presence', warning);
+	if (presence.status === 'invisible') {
+		push(
+			FAIL,
+			'presence',
+			'BOT_STATUS=invisible makes a perfectly healthy bot look OFFLINE — set BOT_STATUS=online'
+		);
+	}
 
 	// --- real gateway login (opt in: opens a session) ------------------------
 	if (options.connect) {
@@ -314,6 +323,63 @@ async function collect(options = {}) {
 		} else {
 			const login = await gatewayLogin(env.BOT_TOKEN, { env });
 			push(login.level, login.title, login.detail);
+		}
+	}
+
+	// --- required files (public checkout has them, some forks strip secret/) ---
+	const root = options.root || path.join(__dirname, '..', '..');
+	const exists = (relative) => {
+		try {
+			return fs.existsSync(path.join(root, relative));
+		} catch (err) {
+			return false;
+		}
+	};
+	const firstExisting = (candidates) => candidates.find((candidate) => exists(candidate)) || null;
+
+	const macro = firstExisting(['tokens/macro.js', 'secret/macro.js']);
+	if (!macro) {
+		push(
+			FAIL,
+			'macro module',
+			'missing — src/owo.js requires tokens/macro.js and falls back to secret/macro.js; without either the cluster throws right after READY'
+		);
+	} else {
+		try {
+			const macroModule = require(path.join(root, macro));
+			const bind = typeof macroModule.bind === 'function';
+			if (bind) push(OK, 'macro module', `${macro} (exports bind/check/verify)`);
+			else
+				push(
+					FAIL,
+					'macro module',
+					`${macro} exists but does not export bind() — the cluster will throw`
+				);
+		} catch (err) {
+			push(FAIL, 'macro module', `${macro} could not be loaded: ${err.message}`);
+		}
+	}
+
+	for (const [label, candidates] of [
+		['badwords.json', ['tokens/badwords.json', 'secret/badwords.json']],
+		['goodwords.json', ['tokens/goodwords.json', 'secret/goodwords.json']],
+	]) {
+		const found = firstExisting(candidates);
+		if (!found) {
+			push(
+				FAIL,
+				label,
+				`missing — src/owo.js / src/utils/global.js require one of ${candidates.join(
+					', '
+				)}; without it the cluster crashes when the module loads`
+			);
+			continue;
+		}
+		try {
+			JSON.parse(fs.readFileSync(path.join(root, found), 'utf8'));
+			push(OK, label, found);
+		} catch (err) {
+			push(FAIL, label, `${found} is not valid JSON: ${err.message}`);
 		}
 	}
 

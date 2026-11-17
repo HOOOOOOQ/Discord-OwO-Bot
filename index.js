@@ -75,13 +75,55 @@ var shards, firstShardID, lastShardID;
 // come from SHARDS/SHARD_FIRST/SHARD_LAST, or SHARDER_HOST when configured, or
 // Discord's recommendation — see src/utils/shardConfig.js.
 
+/**
+ * Worker lifecycle logging + crash-loop detection.
+ *
+ * eris-sharder re-forks a dead worker by itself, which is good for uptime but
+ * hides a worker that dies instantly (bad token, missing secret file, thrown
+ * constructor). A repeated exit is reported as a crash loop with the last error
+ * hint instead of silently restarting forever.
+ */
+function watchWorkers() {
+	const exits = [];
+	cluster.on('fork', (worker) => log.info(`[CLUSTER] worker ${worker.id} forked`));
+	cluster.on('online', (worker) => log.info(`[CLUSTER] worker ${worker.id} online`));
+	cluster.on('exit', (worker, code, signal) => {
+		const now = Date.now();
+		exits.push(now);
+		while (exits.length && now - exits[0] > 60000) exits.shift();
+		log.warn(
+			`[CLUSTER] worker ${worker.id} exited (code ${code}, signal ${
+				signal || 'none'
+			}) — eris-sharder restarts it`
+		);
+		if (exits.length >= 4) {
+			log.error(
+				`[ERROR] crash loop: ${exits.length} worker exits in 60s. The cluster never stays up, so the bot cannot be online.`
+			);
+			log.error('[ACTION] read the error lines above; then run: node index.js --doctor --connect');
+		}
+	});
+}
+
 (async () => {
 	try {
+		if (cluster.isWorker) {
+			// Early worker logs otherwise carry the master identity.
+			log.setIdentity('cluster:boot');
+			// Must run before eris-sharder creates the client: eris defaults to
+			// presence "offline" inside IDENTIFY, and the worker has no listeners
+			// until READY. See src/utils/gatewayBoot.js.
+			require('./src/utils/gatewayBoot.js').install();
+		}
+
 		// Worker clusters receive their shard range over IPC from the master, so
 		// they must not require any shard configuration of their own. (They used
 		// to throw here and never connect, which left the bot offline while the
 		// master process stayed alive.)
 		if (cluster.isMaster) {
+			log.info(
+				`[BOOT] OCEAN starting — node ${process.version}, pid ${process.pid}, CLUSTERS=${config.clusters}`
+			);
 			if (debug) {
 				shards = 1;
 				firstShardID = 0;
@@ -94,13 +136,31 @@ var shards, firstShardID, lastShardID;
 				firstShardID = resolved.firstShardID;
 				lastShardID = resolved.lastShardID;
 				if (config.clusters > shards) config.clusters = shards;
-				log.info('shard config: ' + describeShardConfig(resolved));
+				log.info('[SHARD] ' + describeShardConfig(resolved));
 			}
+
+			log.info(
+				`[CONFIG] prefix=${config.prefix} debug=${debug} clusters=${config.clusters} ` +
+					`shards=${shards} intents=${config.eris.clientOptions.intents}`
+			);
 
 			// Token + privileged-intent check. A disabled MESSAGE CONTENT INTENT used
 			// to leave the bot online but deaf; requesting it while disabled makes
 			// Discord close the gateway with 4014. This keeps the two in sync.
-			await diagnostics.check({ config });
+			const report = await diagnostics.check({ config });
+			if (report && report.user) {
+				log.info(
+					`[DISCORD] authentication successful — ${require('./src/utils/discordApi.js').formatUser(
+						report.user
+					)}`
+				);
+			}
+			if (report && report.messageContentAllowed === false) {
+				log.error(
+					'[ERROR] MESSAGE CONTENT INTENT is disabled — the bot will connect but ignore every command'
+				);
+				log.error(`[ACTION] ${diagnostics.DEV_PORTAL_HINT}`);
+			}
 		}
 
 		if (cluster.isMaster) {
@@ -127,6 +187,7 @@ var shards, firstShardID, lastShardID;
 		});
 
 		if (cluster.isMaster) {
+			watchWorkers();
 			rateLimitUtil.init(sharder.bucket, debug);
 			errors.registerShutdownHook(async () => {
 				log.info('Master shutting down, letting clusters exit');

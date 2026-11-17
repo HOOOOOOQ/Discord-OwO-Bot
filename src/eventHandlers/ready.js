@@ -53,4 +53,8 @@ exports.handle = function () {
 
 	// Keeps {guilds}/{users} templates fresh; no-op unless BOT_PRESENCE_REFRESH_SEC>0.
 	if (!this.__presenceRefresh) this.__presenceRefresh = presence.startRefresh(this);
+
+	// Only printed from a real gateway READY (or its one-time replay when
+	// eris-sharder loads this file after READY) — never from the master process.
+	log.info(`[HEALTH] OCEAN IS ONLINE — ${tag}`);
 };

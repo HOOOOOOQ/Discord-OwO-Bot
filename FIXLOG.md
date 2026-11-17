@@ -1,5 +1,17 @@
 # FIXLOG
 
+## Root cause of "server RUNNING, bot OFFLINE" — presence inside IDENTIFY
+
+- **eris defaults to `presence.status = "offline"`** (`node_modules/eris/lib/Client.js`) and `Shard#identify` sends that object verbatim (`if (this.presence.status) identify.presence = this.presence`). Upstream only changed it through its private sharder server, so a self-hosted cluster reached READY and still displayed **offline**.
+- **The ready handler never ran on the first boot.** eris-sharder loads the application from inside its own `bot.once("ready", …)` (`loadCode`), so any `ready` listener registered by `src/owo.js` is attached after the event fired: no presence, no `bot ready` marker, no health line.
+  Fix: `src/utils/readyState.js` + `EventHandler.replayReady()` replay the ready handler once when the cluster loads with `bot.ready === true`.
+- **Presence is written before `connect()`** by `src/utils/gatewayBoot.js`, so IDENTIFY itself carries `status: online`; the ready handler then refines it with real guild/user counts and activity templates.
+- **Pre-READY visibility**: the same module logs socket open, shard READY, all-shards READY, disconnects with translated close codes and reconnects, plus a READY watchdog (`GATEWAY_READY_TIMEOUT_MS`, default 45s) that prints the last close code and the next step instead of staying silent.
+- **Worker lifecycle + crash-loop detection** in `index.js` (`[CLUSTER] worker N forked/online/exited`, crash-loop warning after ≥4 exits in 60s).
+- **Missing secret files can no longer crash the cluster**: `src/owo.js` required `tokens/macro.js` → `secret/macro.js` without a last resort and `src/utils/global.js` did the same for `goodwords.json`; both threw at module load, i.e. right after READY, producing a crash loop that looks like "online for a second, then offline". Now `src/utils/macroFallback.js` (documented no-op + loud warning) and empty word lists are used.
+- **`--doctor` checks required files** (`tokens|secret/macro.js` exporting `bind`, `badwords.json`, `goodwords.json`) and flags `BOT_STATUS=invisible` as "a healthy bot that looks offline".
+- Tests: `test/gatewayBoot.test.js`, `test/readyState.test.js`, extra doctor cases (missing secret files, invalid macro module, invisible status).
+
 ## Presence, gateway login test, and 24/7 hardening
 
 - **Presence is applied by the bot itself** (`src/utils/presence.js`), on every
