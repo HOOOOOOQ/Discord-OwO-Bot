@@ -22,3 +22,6 @@ node_modules/
 .log
 
 .env
+
+# Build artifacts (delivered separately, never committed)
+ocean-bot-*.zip

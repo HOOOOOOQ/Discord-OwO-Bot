@@ -20,7 +20,7 @@ Root causes and fixes:
   could kill the command. Every operation now `await client.whenReady()` first,
   which waits for the pending connect exactly like Redis queued commands.
 - **`src/utils/animalInfoUtil.js`** ran `initialize()` at require time and
-  retried with a *ref'd* 5 s timer until a bot existed — the real reason
+  retried with a _ref'd_ 5 s timer until a bot existed — the real reason
   `node index.js --doctor`, `scripts/healthcheck.js` and `node --test` appeared
   to hang, and why a database outage produced an endless retry chain. Retries
   and `cacheUtil` TTL timers are `unref()`d now.
@@ -41,7 +41,6 @@ Verification after these changes: `MONGO_OFFLINE=true npm test` → **246 pass /
 clean; `node --check` over all 523 tracked `.js` files; three bad-URI boot runs
 exit 1 without forking a worker. Details: [LAPORAN-PENGUJIAN.md](LAPORAN-PENGUJIAN.md).
 
-
 ## MongoDB-only migration — MySQL, MariaDB and Redis removed from the runtime
 
 The bot used to need three moving parts: a Discord token, MariaDB/MySQL and
@@ -52,13 +51,13 @@ services instead of documenting them better.
 
 ### What changed
 
-| Layer | Before | After |
-| --- | --- | --- |
-| Relational store | `mysql` driver against 87 tables | `src/utils/mongo/sql/*` parses the existing SQL text and executes it against MongoDB collections; same table/column/PK/unique names, `_id` = encoded primary key |
-| Key/value | `redis` client | `src/utils/kv.js` collection `_kv` (hashes, sorted sets, sets, counters, TTL) with atomic `$inc`/`$addToSet` |
-| Pub/sub | Redis pub/sub | capped `_pubsub` collection (1 s poll) |
-| Config | `DATABASE_URL`, `REDIS_URL`, `MYSQL_*`, `REDIS_*` | `MONGODB_URI`, validated and masked |
-| Dependencies | `mysql`, `redis` | `mongodb ^6.22` only |
+| Layer            | Before                                            | After                                                                                                                                                            |
+| ---------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Relational store | `mysql` driver against 87 tables                  | `src/utils/mongo/sql/*` parses the existing SQL text and executes it against MongoDB collections; same table/column/PK/unique names, `_id` = encoded primary key |
+| Key/value        | `redis` client                                    | `src/utils/kv.js` collection `_kv` (hashes, sorted sets, sets, counters, TTL) with atomic `$inc`/`$addToSet`                                                     |
+| Pub/sub          | Redis pub/sub                                     | capped `_pubsub` collection (1 s poll)                                                                                                                           |
+| Config           | `DATABASE_URL`, `REDIS_URL`, `MYSQL_*`, `REDIS_*` | `MONGODB_URI`, validated and masked                                                                                                                              |
+| Dependencies     | `mysql`, `redis`                                  | `mongodb ^6.22` only                                                                                                                                             |
 
 The command layer was **not** rewritten: `src/utils/mysql.js`,
 `src/botHandlers/mysqlHandler.js` and `src/utils/redis.js` keep the same
@@ -112,7 +111,6 @@ npm run verify:commands            → 285 command instances, 526 aliases, 50 ad
 node index.js --doctor             → MongoDB section reports the validated, masked URI
 node index.js (bad MONGODB_URI)    → one clear [MONGO]/[ACTION] block, exit 1, no fork loop
 ```
-
 
 ## "ONLINE but `ohelp` / `o help` never answers" — a database error killed the cluster 2 s after READY (fixed)
 
@@ -837,3 +835,182 @@ ports (`unhealthy`) — it exits 1 as designed.
 | `npm run verify:commands`              | ✅ 284 command instances, 522 aliases, 0 problems                                                                                       |
 | `npm run audit`                        | ⚠️ 22 advisories (1 critical, 17 high) — documented, none newly introduced                                                              |
 | `git diff --check`                     | ✅ no whitespace errors                                                                                                                 |
+
+---
+
+# Putaran 3 — perbaikan sistem menyeluruh
+
+Setiap entri di bawah dibuktikan dulu dari source (atau dari percobaan yang
+benar-benar dijalankan), baru diperbaiki. Nomor test mengacu ke suite yang ada
+di `test/`.
+
+## R3-1 — Gateway gagal connect lalu mengulang **tanpa log, tanpa exit**
+
+**Gejala.** Bot start, tidak pernah Online, tidak ada error di konsol, proses
+tetap hidup selamanya. Panel melihat "running" sehingga tidak pernah restart.
+
+**Akar masalah.** `eris@0.17.2`:
+
+- `Client#connect()` (node_modules/eris/lib/Client.js:493) memanggil
+  `this.getGateway()` / `getBotGateway()`; kegagalan ditangkap dan dijadwalkan
+  ulang lewat `options.reconnectDelay`.
+- `maxReconnectAttempts` default `Infinity`, jadi rekursi itu tidak pernah
+  berhenti dan tidak pernah melaporkan apa pun.
+- Bukti runtime: probe `process.getActiveResourcesInfo()` + `setTimeout` yang
+  dipatch menunjukkan satu-satunya handle yang menahan event loop adalah timer
+  milik `Client.js` (baris 51, 493, 494) — bukan kode bot.
+
+**Perbaikan.** `src/utils/gatewayBoot.js`:
+
+- `options.reconnectDelay` dibungkus **sekali per client** (guard
+  `__oceanReconnectHooked`), menghitung `state.connectFailures` dan mencatat
+  `[GATEWAY] connect attempt N/limit failed — retrying in Xs (reason)`
+  (`reason` dari `describeRestError`).
+- Pada batas `GATEWAY_CONNECT_ATTEMPTS` (default 6) → `[FATAL]` + `[ACTION]` →
+  `(options.exit || process.exit)(1)` setelah 50 ms.
+- `patchedConnect` menolak koneksi baru ketika `state.fatalConnectFailure`,
+  sehingga rekursi eris tidak bisa menahan proses.
+- Counter direset saat `ready`.
+
+**Test.** `test/identify.test.js` test 4 memanggil `options.reconnectDelay`
+langsung dan memastikan `connectFailures >= 2`, `fatalConnectFailure === true`,
+dan `exit` yang di-inject menerima `1`.
+
+**Hasil.** Lulus (4/4 file tersebut). Perilaku jaringan nyata tetap
+**BELUM TERVERIFIKASI** di sandbox.
+
+## R3-2 — Snowflake tanpa tanda kutip dibulatkan `Number()` (korupsi data)
+
+**Gejala.** Setelah migrasi ke MongoDB, dua akun berbeda bisa berbagi satu baris
+`user`/`cowoncy`; angka `count`/`money` "menempel" ke user lain.
+
+**Akar masalah.** Kode lama menyusun SQL dengan konkatenasi:
+
+```js
+'INSERT INTO user (id,count) VALUES (' + p.msg.author.id + ',1) ...';
+```
+
+`id` karena itu masuk sebagai **literal angka**, dan tokenizer
+`src/utils/mongo/sql/parser.js` memakai `Number(text)`:
+`Number('777777777777777777')` → `777777777777777792`. Terbukti dengan test
+sebelum perbaikan: nilai yang tersimpan berbeda dari id yang dikirim.
+
+**Perbaikan.** Literal bulat di luar rentang `Number.MAX_SAFE_INTEGER`
+disimpan sebagai string desimal persis. `values.js` sudah membandingkan dan
+menjumlahkan dengan BigInt, jadi semantik SQL tidak berubah; `toNumber()`
+(untuk `LIMIT`) tetap menerima string numerik.
+
+**Test.** `test/sqlEngine.test.js` → "an unquoted snowflake keeps every digit
+(the `owo` insert path)": dua kali `owo` menghasilkan `count = 2`, id tetap
+`777777777777777777`, dan `777777777777777778` menjadi baris terpisah.
+
+**Hasil.** Lulus (28/28 file SQL).
+
+## R3-3 — Command yang tidak dikenal dijawab dengan **diam total**
+
+**Gejala.** `o hlep`, `o balanc`, `o prefixx` tidak menghasilkan apa pun; user
+menyimpulkan bot offline.
+
+**Akar masalah.** `src/commands/command.js` `dispatch()`:
+
+```js
+if (!commands[command]) { trace.parsed(...); if (containsPoints) {...} return; }
+```
+
+Jalur "tidak ditemukan" langsung `return` tanpa balasan.
+
+**Perbaikan.** `answerUnknownCommand()`:
+
+- balasan `🚫 | @user, I don't know the command \`x\`. Try \`ohelp\` to see every command.`
+  (memakai prefix yang benar-benar dipakai, termasuk prefix custom guild),
+- dibatasi 10 detik per user, cache maksimum 5000 entri dengan pembersihan,
+- hanya untuk token yang mirip nama command (`[\p{L}\p{N}_-]{1,32}`), jadi
+  percakapan biasa tidak dibanjiri balasan,
+- dibungkus `try/catch` + `errors.logFailure` — gagal kirim tidak memutus pipeline.
+
+**Test.** `test/pipeline.test.js`:
+"an unknown command after a valid prefix is answered once, then throttled" —
+balasan pertama berisi nama command + petunjuk `help`, percobaan kedua dalam
+jendela waktu yang sama tidak dibalas, prefix kosong (`o`) tetap diam.
+
+**Hasil.** Lulus (9/9).
+
+## R3-4 — `o stats` melempar error pada database baru
+
+**Akar masalah.** `SUM(common) …` bernilai `NULL` saat `animal_count` masih
+kosong (persis kondisi instalasi baru) sehingga `parseInt(null)` /
+`toFancyNum(null)` melempar `Cannot read properties of null (reading 'toString')`.
+
+**Perbaikan.** `stats.js` membaca `SUM/COUNT` yang `NULL` sebagai `0`
+(`num()` helper + `sums`/`total` yang aman).
+
+**Test.** `test/pipeline.test.js` → `o stats` harus menjawab dan tidak boleh
+mengandung "something went wrong while running that command".
+
+**Hasil.** Lulus.
+
+## R3-5 — `o ping` / `o stats` error bila guild belum ada di `guildShardMap`
+
+**Akar masalah.** `client.shards.get(client.guildShardMap[guildId]).latency` —
+`guildShardMap` baru terisi setelah `GUILD_CREATE`; pada invite baru, resume,
+atau cache miss nilainya `undefined` → `TypeError`.
+
+**Perbaikan.** `src/utils/shardLookup.js` (`shardFor(client, guildId)`) memilih
+shard dari peta, jika tidak ada memakai shard pertama worker, dan selalu
+mengembalikan `latency` numerik. Dipakai `ping.js` dan `stats.js`.
+
+**Test.** `test/pipeline.test.js` (bot palsu tanpa `guildShardMap`) → `o ping`
+menjawab `42ms` alih-alih pesan error.
+
+**Hasil.** Lulus.
+
+## R3-6 — Penulisan poin `owo` berjalan sebagai promise menggantung
+
+**Akar masalah.** `dispatch()` memanggil `executeCommand(...)` tanpa `await`
+untuk jalur `points` dan `rules`. Error sudah ditangkap di dalam, tetapi
+pemanggil tidak tahu kapan selesai (urutan balasan tidak deterministik dan
+tidak bisa diuji).
+
+**Perbaikan.** Ketiga pemanggilan di-`await`.
+
+**Test.** `test/pipeline.test.js` test 6 memeriksa baris `user` tepat setelah
+`dispatch('owo')` selesai.
+
+**Hasil.** Lulus.
+
+## R3-7 — Shutdown bisa menggantung / timer yatim
+
+**Akar masalah.** Pemotong 5 detik per hook shutdown tetap _ref'd_ walau hook
+sudah selesai sehingga timer yatim menahan event loop; nilainya juga tidak bisa
+diatur.
+
+**Perbaikan.** `SHUTDOWN_HOOK_TIMEOUT_MS` (default 5000) dan `clearTimeout`
+di `finally`.
+
+**Test.** `test/shutdown.test.js` (baru, 4 test): urutan hook, exit code,
+permintaan kedua diabaikan, hook yang menggantung dipotong (25 ms) dan tetap
+exit dengan kode yang diminta, handler `SIGTERM`/`SIGINT` dipasang sekali.
+
+**Hasil.** Lulus, file selesai < 1 detik.
+
+## R3-8 — MongoDB lokal tanpa password ditolak pre-flight
+
+**Akar masalah.** `inspectUri()` mewajibkan `user:pass` untuk semua host.
+`mongodb://127.0.0.1:27017/ocean` (mongod tanpa `--auth`, docker) ditolak
+padahal sah.
+
+**Perbaikan.** Host loopback (`localhost`, `127.0.0.1`, `::1`) diterima dengan
+peringatan `[MONGO] connecting to a loopback MongoDB without credentials …`;
+host lain tetap wajib kredensial (pesan Atlas tetap sama).
+
+**Test.** Dijalankan nyata: boot dengan `mongodb://127.0.0.1:27099/...` →
+peringatan muncul, kegagalan koneksi dilaporkan jelas, `exit 1`, tanpa fork.
+
+## R3-9 — Kategori log `[COMMAND]` tidak pernah dipakai
+
+**Perbaikan.** `errors.logFailure` memberi tag `[COMMAND]` bila `meta.command`
+atau `meta.stage` berasal dari command; sisanya `[ERROR]`. Sekarang
+`grep '\[COMMAND\]' bot.log` menampilkan hanya kegagalan yang dialami user.
+
+**Test.** Terlihat langsung pada output `test/pipeline.test.js`
+(`handled [COMMAND] command=stats …`) dan tidak mengubah hasil `npm test` (264/264).

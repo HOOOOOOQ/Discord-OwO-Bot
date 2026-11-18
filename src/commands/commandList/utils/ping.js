@@ -6,6 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const { shardFor } = require('../../../utils/shardLookup.js');
 
 const pongEmoji = '🏓';
 
@@ -29,8 +30,8 @@ module.exports = new CommandInterface({
 	six: 500,
 
 	execute: async function (p) {
-		//query ping from shard
-		let ping = p.client.shards.get(p.client.guildShardMap[p.msg.channel.guild.id]).latency;
+		//query ping from shard (defensive: the guild may not be in guildShardMap yet)
+		let ping = shardFor(p.client, p.msg.channel.guild.id).latency;
 		let str = p.command === 'ping' ? 'pong' : 'ping';
 		p.send(pongEmoji + ' **|** ...' + str + '! In ' + ping + 'ms');
 	},

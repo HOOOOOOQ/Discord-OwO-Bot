@@ -24,6 +24,66 @@ const mcommands = {};
 const commandGroups = {};
 const appCommandNameToCommand = {};
 
+/**
+ * "I did not understand that" replies.
+ *
+ * Before this, a typo after a valid prefix (`o hlep`, `o balanc`) was dropped on
+ * the floor: the parser matched nothing and the bot stayed silent, which users
+ * report as "the bot is offline". The reply is throttled per user (one per
+ * 10 s) so a spammer cannot make the bot answer every message, and it is only
+ * sent for tokens that actually look like a command name.
+ */
+const UNKNOWN_REPLY_WINDOW_MS = 10000;
+const UNKNOWN_REPLY_CACHE_LIMIT = 5000;
+const unknownReplies = new Map();
+
+function looksLikeCommandName(name) {
+	if (!name) return false;
+	if (name.length > 32) return false;
+	return /^[\p{L}\p{N}_-]+$/u.test(name);
+}
+
+function shouldAnswerUnknownCommand(msg) {
+	const key = `${msg.author && msg.author.id ? msg.author.id : '?'}`;
+	const now = Date.now();
+	const last = unknownReplies.get(key) || 0;
+	if (now - last < UNKNOWN_REPLY_WINDOW_MS) return false;
+	unknownReplies.set(key, now);
+	if (unknownReplies.size > UNKNOWN_REPLY_CACHE_LIMIT) {
+		for (const [id, at] of unknownReplies) {
+			if (now - at > UNKNOWN_REPLY_WINDOW_MS) unknownReplies.delete(id);
+		}
+		if (unknownReplies.size > UNKNOWN_REPLY_CACHE_LIMIT) unknownReplies.clear();
+	}
+	return true;
+}
+
+/**
+ * Answers an unknown command once per user/window. Never throws: a failed
+ * reply must not break the message pipeline.
+ */
+async function answerUnknownCommand(main, msg, name, usedPrefix) {
+	if (!main || !main.sender || !msg) return;
+	if (!looksLikeCommandName(name)) return;
+	const prefix = usedPrefix || main.prefix || 'o';
+	if (!shouldAnswerUnknownCommand(msg)) {
+		trace.rejected('unknown_command_throttled', msg, { command: name });
+		return;
+	}
+	try {
+		const errorMsg = main.sender.error(
+			(main.config && main.config.emoji && main.config.emoji.invalid) || '🚫',
+			msg
+		);
+		await errorMsg(
+			` I don't know the command \`${name}\`. Try \`${prefix}help\` to see every command.`
+		);
+		trace.executed(msg, 'unknown', { command: name, phase: 'answered_unknown' });
+	} catch (err) {
+		errors.logFailure(err, { stage: 'unknown-command-reply', command: name });
+	}
+}
+
 class Command {
 	constructor(main) {
 		this.main = main;
@@ -55,7 +115,9 @@ class Command {
 			});
 			//if user said owo/uwu
 			if (containsPoints) {
-				executeCommand(this.main, initParam(msg, 'points', [], this.main));
+				// awaited: the SQL write used to run as a floating promise, so a
+				// caller (and the tests) could not tell when "owo" had finished
+				await executeCommand(this.main, initParam(msg, 'points', [], this.main));
 			}
 			return;
 		}
@@ -68,8 +130,13 @@ class Command {
 		if (!commands[command]) {
 			trace.parsed(msg, command, false);
 			if (containsPoints) {
-				executeCommand(this.main, initParam(msg, 'points', [], this.main));
+				// awaited: the SQL write used to run as a floating promise, so a
+				// caller (and the tests) could not tell when "owo" had finished
+				await executeCommand(this.main, initParam(msg, 'points', [], this.main));
+				return;
 			}
+			// A typo must not look like a dead bot (see answerUnknownCommand).
+			await answerUnknownCommand(this.main, msg, command, usedPrefix);
 			return;
 		}
 		trace.parsed(msg, command, true, commands[command].alias?.[0]);
@@ -77,7 +144,7 @@ class Command {
 		// Make sure user accepts rules first
 		if (!(await acceptedRules(this.main, msg))) {
 			trace.rejected('rules_not_accepted', msg, { command });
-			executeCommand(this.main, initParam(msg, 'rule', [], this.main));
+			await executeCommand(this.main, initParam(msg, 'rule', [], this.main));
 			return;
 		}
 

@@ -91,6 +91,10 @@ const state = {
 	websocketOpened: false,
 	lastPacket: null,
 	lastError: null,
+	// REST /gateway failures: eris hides them behind an endless silent retry.
+	lastRestError: null,
+	connectFailures: 0,
+	fatalConnectFailure: false,
 	clusterId: null,
 	activeClient: null,
 	activeRange: null,
@@ -457,6 +461,8 @@ function attachLogging(client, options = {}) {
 	client.on('ready', () => {
 		readySeen = true;
 		state.readyEvents++;
+		state.connectFailures = 0;
+		state.fatalConnectFailure = false;
 		clearTimeout(timer);
 		const shards = client.shards ? client.shards.size : 1;
 		const guilds = client.guilds ? client.guilds.size : 0;
@@ -507,6 +513,79 @@ function attachLogging(client, options = {}) {
 }
 
 /**
+ * How many failed `connect()` attempts are tolerated before the worker stops
+ * pretending it can recover. Every attempt is a REST call to Discord; a bad
+ * token or a blocked egress never fixes itself, and eris retries forever.
+ */
+function connectAttemptLimit(env = process.env) {
+	const parsed = Number.parseInt(env.GATEWAY_CONNECT_ATTEMPTS, 10);
+	if (Number.isInteger(parsed) && parsed > 0) return parsed;
+	return 6;
+}
+
+/** Short, credential-free description of a REST/gateway discovery failure. */
+function describeRestError(err) {
+	if (!err) return 'unknown error';
+	const status = err.status || err.statusCode || err.code;
+	const message = String((err && err.message) || err);
+	const short = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+	if (status && !short.includes(String(status))) return `${status} — ${short}`;
+	return short;
+}
+
+/**
+ * eris `Client#connect()` fetches the gateway URL over REST *before* it opens a
+ * socket, and wraps that call in
+ *
+ *     catch (err) { ... await sleep(reconnectDelay(...)); return this.connect(); }
+ *
+ * with `maxReconnectAttempts: Infinity`. A 401 (bad token), a 429, or a REST
+ * failure through eris-sharder's SyncedRequestHandler therefore produced **no
+ * WebSocket, no log line and no end** — the exact "worker online, bot offline,
+ * nothing in the console" report. Wrapping the two discovery methods makes the
+ * real reason visible, and the reconnectDelay hook counts the retries so the
+ * worker can fail fast instead of looping silently for hours.
+ */
+function installGatewayDiscoveryLogging(proto) {
+	if (!proto || proto.__oceanDiscoveryPatched) return false;
+	for (const name of ['getGateway', 'getBotGateway']) {
+		const original = proto[name];
+		if (typeof original !== 'function') continue;
+		proto[name] = function patchedGatewayDiscovery(...args) {
+			const result = original.apply(this, args);
+			if (!result || typeof result.then !== 'function') return result;
+			return result.catch((err) => {
+				state.lastRestError = describeRestError(err);
+				state.lastError = state.lastRestError;
+				log.error(`[GATEWAY] ${name}() failed: ${state.lastRestError}`);
+				log.error(
+					'[DIAG] this is the REST call eris makes before it opens any socket — ' +
+						'GET /gateway with the bot token. Without it there is no WebSocket at all.'
+				);
+				if (/401|Unauthorized/i.test(state.lastRestError)) {
+					log.error(
+						'[ACTION] the token was rejected: copy BOT_TOKEN again from ' +
+							'Developer Portal → Bot → Reset Token (no "Bot " prefix, no quotes, no newline)'
+					);
+				} else if (/429|rate limit/i.test(state.lastRestError)) {
+					log.error('[ACTION] rate limited by Discord — wait a few minutes before restarting');
+				} else if (
+					/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|socket hang up/i.test(state.lastRestError)
+				) {
+					log.error(
+						'[ACTION] the host cannot reach discord.com: allow outbound HTTPS/443 and DNS ' +
+							'(node index.js --doctor probes it)'
+					);
+				}
+				throw err;
+			});
+		};
+	}
+	proto.__oceanDiscoveryPatched = true;
+	return true;
+}
+
+/**
  * Patches `Eris.Client.prototype.connect` once per process so the presence is
  * correct in IDENTIFY and the lifecycle is logged before eris-sharder connects.
  */
@@ -532,13 +611,24 @@ function install(options = {}) {
 		return false;
 	}
 	if (proto.__oceanGatewayPatched) {
+		installGatewayDiscoveryLogging(proto);
 		installed = true;
 		return true;
 	}
 
+	installGatewayDiscoveryLogging(proto);
 	const originalConnect = proto.connect;
 	proto.connect = function patchedConnect(...args) {
 		const env = options.env || process.env;
+		// eris retries connect() recursively and forever (maxReconnectAttempts
+		// defaults to Infinity). Once the cap has been hit the worker is about to
+		// exit; refusing the recursion guarantees the process can terminate even
+		// when the caller keeps calling connect().
+		if (state.fatalConnectFailure) {
+			return Promise.reject(
+				new Error('gateway connect retry cap reached — refusing to open another connection')
+			);
+		}
 		// One gateway client per shard range per worker. eris-sharder would create a
 		// second client if the assignment were ever delivered twice, and two
 		// IDENTIFYs for the same shards invalidate each other's session (flapping).
@@ -582,6 +672,47 @@ function install(options = {}) {
 			'connect_called',
 			`${this.constructor ? this.constructor.name : 'Client'} at ${Date.now() - state.startedAt}ms`
 		);
+		// eris calls this before every retry of connect(); it is the only hook
+		// that fires when the REST discovery keeps failing. Without it the retry
+		// loop is completely silent (maxReconnectAttempts defaults to Infinity).
+		// Installed once per client: connect() calls itself recursively on every
+		// retry, and wrapping the already-wrapped delay would count twice.
+		if (!this.__oceanReconnectHooked) {
+			try {
+				this.__oceanReconnectHooked = true;
+				// A new client (cluster respawn) starts with a clean slate.
+				state.fatalConnectFailure = false;
+				const previousDelay = this.options && this.options.reconnectDelay;
+				const limit = connectAttemptLimit(env);
+				state.connectFailures = 0;
+				this.options.reconnectDelay = (lastDelay, attempts) => {
+					state.connectFailures += 1;
+					const wait =
+						typeof previousDelay === 'function' ? previousDelay(lastDelay, attempts) : 20000;
+					const reason = state.lastRestError || state.lastError || 'unknown';
+					log.error(
+						`[GATEWAY] connect attempt ${state.connectFailures}/${limit} failed — ` +
+							`retrying in ${Math.round(wait / 1000)}s (${reason})`
+					);
+					if (state.connectFailures >= limit && !state.fatalConnectFailure) {
+						state.fatalConnectFailure = true;
+						log.error(
+							`[FATAL] the gateway never opened after ${state.connectFailures} attempts — ` +
+								'this is not a transient failure, so the worker stops instead of retrying forever'
+						);
+						log.error(
+							'[ACTION] fix the reason above (token, Developer Portal intents, outbound 443/DNS) ' +
+								'then restart; `node index.js --doctor --connect` names it exactly'
+						);
+						const exit = (options && options.exit) || process.exit;
+						setTimeout(() => exit(1), 50);
+					}
+					return wait;
+				};
+			} catch (err) {
+				log.warn(`[GATEWAY] could not install the retry reporter (${err.message})`);
+			}
+		}
 		let connected;
 		try {
 			connected = originalConnect.apply(this, args);
@@ -617,6 +748,9 @@ module.exports = {
 	GATEWAY_OPCODES,
 	STARTUP_STAGES,
 	install,
+	installGatewayDiscoveryLogging,
+	connectAttemptLimit,
+	describeRestError,
 	identifyPresence,
 	attachLogging,
 	instrumentShard,

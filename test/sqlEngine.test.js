@@ -300,6 +300,26 @@ test('interpolated values (the old ${} style) behave like parameters', async () 
 	assert.strictEqual(String(rows[0].money), '100');
 });
 
+test('an unquoted snowflake keeps every digit (the `owo` insert path)', async () => {
+	const { db } = await fresh();
+	// `Number('777777777777777777')` is 777777777777777792 — the command code
+	// interpolates ids without quotes, so the parser must not round them.
+	const id = '777777777777777777';
+	const sql =
+		'INSERT INTO user (id,count) VALUES (' + id + ',1) ON DUPLICATE KEY UPDATE count = count + 1;';
+	await db.execute(sql);
+	await db.execute(sql);
+	const rows = await db.execute('SELECT id, count FROM user');
+	assert.strictEqual(rows.length, 1);
+	assert.strictEqual(String(rows[0].id), id, 'the stored id lost digits');
+	assert.strictEqual(Number(rows[0].count), 2, 'the second "owo" did not increment');
+
+	// Two neighbouring ids must stay two different users.
+	await db.execute('INSERT INTO user (id,count) VALUES (777777777777777778,1)');
+	const all = await db.execute('SELECT id FROM user');
+	assert.strictEqual(all.length, 2, 'two snowflakes collapsed into one row');
+});
+
 test('an unknown table reports a readable error instead of corrupting data', async () => {
 	const { db } = await fresh();
 	await assert.rejects(db.execute('SELECT * FROM not_a_table'), /unknown table/i);
