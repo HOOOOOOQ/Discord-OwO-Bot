@@ -321,7 +321,7 @@ async function collect(options = {}) {
 		push(
 			WARN,
 			'CLUSTERS',
-			'not set — the repo default (60) needs several GB of RAM. Set CLUSTERS=1 or 2 for a small server'
+			'not set — using 1 cluster (safe for a 2 GB panel). Set CLUSTERS=2 only on a larger server'
 		);
 	} else if (clusters > 4) {
 		push(

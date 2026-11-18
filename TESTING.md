@@ -15,7 +15,7 @@ npm run audit             # npm audit --omit=dev
 `npm ci` must succeed before any of the above (see DEPLOYMENT.md for the native
 `canvas` prerequisites). Always set `MONGO_OFFLINE=true` for offline runs: a few
 modules touch the Mongo client at require-time and would otherwise try to
-connect. **Result of the last full run: 239 pass / 0 fail.**
+connect. **Result of the last full run: 246 pass / 0 fail.**
 
 ## Test layout
 
@@ -29,6 +29,7 @@ connect. **Result of the last full run: 239 pass / 0 fail.**
 | `test/mysqlHandler.test.js`     | query timeout option, commit/rollback idempotency, single release, commit failure rollback, lease watchdog, `beginTransaction` failure |
 | `test/sqlParser.test.js`        | 34 real statement shapes from the command tree: tokenizer, multi-statement split, aliases, `ON DUPLICATE KEY` parsing, rejections    |
 | `test/sqlEngine.test.js`        | `INSERT IGNORE`, duplicate-key errors, atomic `$inc` for `ON DUPLICATE KEY UPDATE` (25 parallel increments), AUTO_INCREMENT/insertId, INNER vs LEFT JOIN, `UPDATE ... JOIN`, multi-table DELETE, COUNT/SUM/MAX/GROUP BY, subqueries, `TIMESTAMPDIFF`, `REPLACE INTO`, generated columns, snowflake PKs |
+| `test/platform.test.js`          | no InfluxDB/StatsD traffic when unconfigured, no loopback sockets, KV waits for MongoDB, "Join Community" link button, presence re-applied on resume |
 | `test/kv.test.js`               | the Redis replacement: hashes, `hincrby`, sorted sets (XP/ranking), sets, TTL expiry, purge, and prefix persistence across a simulated restart |
 | `test/migration.test.js`        | no `require('mysql')`/`require('redis')`, no such dependencies in `package.json`/lockfile, no legacy env reads, URI validation + masking, presence defaults, guild link |
 | `test/doctor.test.js`           | MongoDB storage checks: healthy env, missing/invalid URI, SQL URL rejection, legacy variable warnings                                                                  |

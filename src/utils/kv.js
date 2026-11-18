@@ -39,7 +39,17 @@ const log = require('./log.js');
 const COLLECTION = '_kv';
 const DEFAULT_TTL_SECONDS = 259200; // 3 days, same default as before
 
-function collection() {
+/**
+ * Wait for the MongoDB connection, then return the collection.
+ *
+ * `client.getStore()` throws when the client is not connected yet. Redis used
+ * to queue commands until it connected, so a prefix lookup that raced with the
+ * boot sequence must not blow up a command — `whenReady()` waits for the
+ * pending connect() instead (and rejects only when MongoDB is genuinely
+ * unavailable, which is reported once by the connection module).
+ */
+async function collection() {
+	await client.whenReady();
 	return client.getStore().collection(COLLECTION);
 }
 
@@ -50,13 +60,11 @@ function isExpired(doc) {
 }
 
 async function load(key, options = {}) {
-	const doc = await collection().findOne({ _id: String(key) });
+	const doc = await (await collection()).findOne({ _id: String(key) });
 	if (!doc) return null;
 	if (isExpired(doc)) {
 		if (options.purge !== false)
-			await collection()
-				.deleteMany({ _id: String(key) })
-				.catch(() => {});
+			await (await collection()).deleteMany({ _id: String(key) }).catch(() => {});
 		return null;
 	}
 	return doc;
@@ -77,18 +85,18 @@ async function hget(key, field) {
 
 async function hset(key, field, value = 1) {
 	if (value === undefined) value = null;
-	await collection().updateOne(
-		{ _id: String(key) },
-		{ $set: { [fieldPath('h', field)]: value } },
-		{ upsert: true }
-	);
+	await (
+		await collection()
+	).updateOne({ _id: String(key) }, { $set: { [fieldPath('h', field)]: value } }, { upsert: true });
 	return 1;
 }
 
 async function hdel(key, field) {
 	const doc = await load(key);
 	if (!doc || !doc.h || doc.h[field] === undefined) return 0;
-	await collection().updateOne({ _id: String(key) }, { $unset: { [fieldPath('h', field)]: '' } });
+	await (
+		await collection()
+	).updateOne({ _id: String(key) }, { $unset: { [fieldPath('h', field)]: '' } });
 	return 1;
 }
 
@@ -103,7 +111,7 @@ async function hmset(key, values = {}) {
 	const set = {};
 	for (const field of Object.keys(values)) set[fieldPath('h', field)] = values[field];
 	if (!Object.keys(set).length) return 1;
-	await collection().updateOne({ _id: String(key) }, { $set: set }, { upsert: true });
+	await (await collection()).updateOne({ _id: String(key) }, { $set: set }, { upsert: true });
 	return 1;
 }
 
@@ -113,7 +121,9 @@ async function hgetall(key) {
 }
 
 async function hincrby(key, field, amount = 1) {
-	const doc = await collection().findOneAndUpdate(
+	const doc = await (
+		await collection()
+	).findOneAndUpdate(
 		{ _id: String(key) },
 		{ $inc: { [fieldPath('h', field)]: Number(amount) || 0 } },
 		{ upsert: true, returnDocument: 'after' }
@@ -126,7 +136,9 @@ async function hincrby(key, field, amount = 1) {
 /* ------------------------------------------------------------ counters --- */
 
 async function incrby(key, amount = 1) {
-	const doc = await collection().findOneAndUpdate(
+	const doc = await (
+		await collection()
+	).findOneAndUpdate(
 		{ _id: String(key) },
 		{ $inc: { n: Number(amount) || 0 } },
 		{ upsert: true, returnDocument: 'after' }
@@ -138,7 +150,9 @@ async function incrby(key, amount = 1) {
 
 /** ZADD / ZINCRBY: adds `amount` to a member's score and returns the new score. */
 async function zincrby(key, member, amount = 1) {
-	const doc = await collection().findOneAndUpdate(
+	const doc = await (
+		await collection()
+	).findOneAndUpdate(
 		{ _id: String(key) },
 		{ $inc: { [fieldPath('z', String(member))]: Number(amount) || 0 } },
 		{ upsert: true, returnDocument: 'after' }
@@ -197,10 +211,9 @@ async function zrevrange(key, min, max) {
 async function zrem(key, member) {
 	const doc = await load(key);
 	if (!doc || !doc.z || doc.z[String(member)] === undefined) return 0;
-	await collection().updateOne(
-		{ _id: String(key) },
-		{ $unset: { [fieldPath('z', String(member))]: '' } }
-	);
+	await (
+		await collection()
+	).updateOne({ _id: String(key) }, { $unset: { [fieldPath('z', String(member))]: '' } });
 	return 1;
 }
 
@@ -209,11 +222,9 @@ async function zrem(key, member) {
 async function sadd(key, member) {
 	const doc = await load(key);
 	if (doc && Array.isArray(doc.s) && doc.s.includes(String(member))) return 0;
-	await collection().updateOne(
-		{ _id: String(key) },
-		{ $addToSet: { s: String(member) } },
-		{ upsert: true }
-	);
+	await (
+		await collection()
+	).updateOne({ _id: String(key) }, { $addToSet: { s: String(member) } }, { upsert: true });
 	return 1;
 }
 
@@ -236,14 +247,16 @@ async function get(key) {
 }
 
 async function set(key, value) {
-	await collection().updateOne({ _id: String(key) }, { $set: { v: value } }, { upsert: true });
+	await (
+		await collection()
+	).updateOne({ _id: String(key) }, { $set: { v: value } }, { upsert: true });
 	return 'OK';
 }
 
 async function del(key) {
 	const doc = await load(key);
 	if (!doc) return 0;
-	await collection().deleteMany({ _id: String(key) });
+	await (await collection()).deleteMany({ _id: String(key) });
 	return 1;
 }
 
@@ -255,18 +268,18 @@ async function expire(key, seconds = DEFAULT_TTL_SECONDS) {
 	const doc = await load(key);
 	if (!doc) return 0;
 	const when = new Date(Date.now() + Number(seconds || DEFAULT_TTL_SECONDS) * 1000);
-	await collection().updateOne({ _id: String(key) }, { $set: { exp: when } });
+	await (await collection()).updateOne({ _id: String(key) }, { $set: { exp: when } });
 	return 1;
 }
 
 /** Removes expired documents that the TTL index has not collected yet. */
 async function purgeExpired(limit = 500) {
 	try {
-		const docs = await collection().find({}, { limit });
+		const docs = await (await collection()).find({}, { limit });
 		let removed = 0;
 		for (const doc of docs) {
 			if (!isExpired(doc)) continue;
-			await collection().deleteMany({ _id: doc._id });
+			await (await collection()).deleteMany({ _id: doc._id });
 			removed++;
 		}
 		if (removed) log.debug(`[KV] purged ${removed} expired key(s)`);

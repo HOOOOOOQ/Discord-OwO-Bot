@@ -99,6 +99,6 @@
 	"owners": [],
 	"evalEnabled": false,
 	"metricsEnabled": false,
-	"clusters": 60,
+	"clusters": 1,
 	"debugWhitelist": []
 }

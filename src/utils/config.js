@@ -162,10 +162,13 @@ config.debug = parseBool(process.env.DEBUG, defaults.debug === true);
 // Owner-only dynamic evaluation. Off unless explicitly enabled.
 config.evalEnabled = parseBool(process.env.ALLOW_EVAL, defaults.evalEnabled === true);
 config.prefix = (process.env.PREFIX || defaults.prefix || 'o').toLowerCase();
-config.clusters = Number.parseInt(process.env.CLUSTERS, 10) || defaults.clusters || 60;
+// OCEAN targets a single Pterodactyl process (one cluster, no sharder service).
+// Upstream OwO ran 60 clusters on a fleet; on a 1-2 GB panel that is an instant
+// OOM, so the fallback is 1 and an explicit CLUSTERS still wins.
+config.clusters = Number.parseInt(process.env.CLUSTERS, 10) || defaults.clusters || 1;
 if (!Number.isInteger(config.clusters) || config.clusters < 1 || config.clusters > 200) {
-	log.warn(`config: invalid CLUSTERS value, falling back to 60`);
-	config.clusters = 60;
+	log.warn('config: invalid CLUSTERS value, falling back to 1');
+	config.clusters = 1;
 }
 // Guilds that are allowed to use the bot while DEBUG is on
 config.debugWhitelist = parseIdList(

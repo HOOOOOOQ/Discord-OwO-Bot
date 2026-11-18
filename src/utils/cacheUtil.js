@@ -28,9 +28,10 @@ class CacheUtil {
 		}
 		this.cache[type][key] = value;
 		if (ttl) {
-			setTimeout(() => {
+			const timer = setTimeout(() => {
 				delete this.cache[type][key];
 			}, ttl);
+			if (typeof timer.unref === 'function') timer.unref();
 		}
 	}
 
