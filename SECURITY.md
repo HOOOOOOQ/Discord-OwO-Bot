@@ -9,7 +9,7 @@ problem.
 ## Threat model of this codebase
 
 OwO Bot is a long-running, multi-process Discord bot (~60 sharder clusters per
-host) that talks to Discord, MariaDB, Redis and a handful of internal HTTP
+host) that talks to Discord, MongoDB Atlas and a handful of internal HTTP
 services. The relevant attacker is:
 
 1. a Discord user who can send commands to the bot (untrusted input),
@@ -94,10 +94,8 @@ graceful shutdown, and pool/connection `error` events have listeners.
 | -------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `tar` (critical) via `canvas@2` → `@mapbox/node-pre-gyp` | Fixed only in `canvas@3`, a breaking change for every image command | Not reachable from untrusted input (build-time tooling); track for a canvas 3 migration |
 | `dd-trace@0.31` (high, EOL)                              | Major upgrade to 6.x changes APM behaviour                          | Only initialised outside debug mode; upgrade scheduled                                  |
-| `redis@2.8` (high, EOL)                                  | Same reason: v4 changes the client API used everywhere              | Redis is on a private network; upgrade scheduled                                        |
 | `patreon`, `patreon-discord` (high, abandoned)           | Upstream SDK abandoned                                              | Optional integration, disabled without credentials                                      |
 | `mathjs@6` (high, prototype pollution)                   | Engine is shared by `owo math`; v6→v15 is a large jump              | Expression evaluation runs in a sandboxed worker with import/createUnit/parse disabled  |
-| `mysql@2.18` (deprecated)                                | `mysql2` has subtle type/date differences across 87 tables          | Parameterized queries + query timeouts added; migration tracked in FIXLOG               |
-| `multipleStatements: true`                               | Required by existing multi-statement queries                        | See §3                                                                                  |
+| Multi-statement strings                                  | ~53 legacy statements combine several writes                        | Translated into ordered Mongo writes with atomic `$inc`; see §3 and `src/utils/mongo/sql` |
 
 Run `npm run audit` for the current, authoritative list.

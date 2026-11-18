@@ -5,92 +5,189 @@
  * For more information, see README.md and LICENSE
  */
 
+/**
+ * The bot's old MySQL entry point, now backed by MongoDB Atlas.
+ *
+ * The name of the file is kept on purpose: ~350 call sites across the command
+ * tree (`con.query(...)`, `mysql.query(...)`, `mysql.con.query(...)`) and their
+ * result shapes (`result[0][0]` for multi-statement strings, `affectedRows`,
+ * `insertId`) stay exactly as they were. What changed is where the data lives:
+ * every statement is parsed and executed as MongoDB operations by
+ * `src/utils/mongo/sql/`. No MySQL server, no `mysql` npm package.
+ *
+ * `query()` accepts the same argument shapes the mysql driver accepted:
+ *
+ *   con.query(sql, cb)                 con.query(sql, values, cb)
+ *   con.query({ sql, timeout }, values, cb)
+ *   await con.query(sql, values)       await con.query({ sql })
+ */
+
 const log = require('./log.js');
-const { resolveMysql } = require('./dbUrl.js');
-const mysql = require('mysql');
+const client = require('./mongo/client.js');
+const sqlLayer = require('./mongo/sql/index.js');
+const { loadSchema } = require('./mongo/schema.js');
 
-// DATABASE_URL/MYSQL_URL wins over the legacy MYSQL_* variables.
-const connection = resolveMysql();
+const queryTimeout = Number.parseInt(process.env.MONGO_QUERY_TIMEOUT_MS, 10) || 30000;
 
-const config = {
-	host: connection.host,
-	port: connection.port,
-	user: connection.user,
-	password: connection.password,
-	database: connection.database,
-	supportBigNumbers: true,
-	// Several existing battle/team queries send more than one statement in a
-	// single call (battle/ab.js, battle/db.js, zoo/sacrifice.js, teamUtil.js), so
-	// this cannot be switched off without rewriting those features. It is kept
-	// configurable and the codebase is hardened with parameterized queries
-	// instead. Set MYSQL_MULTIPLE_STATEMENTS=false only after those call sites
-	// are migrated to `transaction.query()` calls.
-	multipleStatements: process.env.MYSQL_MULTIPLE_STATEMENTS !== 'false',
-	charset: 'utf8mb4',
-	connectionLimit: Number.parseInt(process.env.MYSQL_CONNECTION_LIMIT, 10) || 10,
-	connectTimeout: Number.parseInt(process.env.MYSQL_CONNECT_TIMEOUT_MS, 10) || 10000,
-	// Recycle idle connections so stale sockets do not turn into query errors
-	maxIdle: Number.parseInt(process.env.MYSQL_MAX_IDLE, 10) || 10,
-	idleTimeout: Number.parseInt(process.env.MYSQL_IDLE_TIMEOUT_MS, 10) || 60000,
-};
+let connectionCounter = 0;
 
-if (!config.host) {
-	log.error('[DATABASE] no MySQL host configured — every database feature will fail');
-	log.error(
-		'[ACTION] set DATABASE_URL=mysql://user:pass@HOST:3306/owo (Pterodactyl → Startup/Variables). ' +
-			'Inside the container 127.0.0.1 is the bot itself, not the database host.'
-	);
-} else {
-	log.info(
-		`[DATABASE] connecting to ${config.host}:${config.port || 3306}/${config.database || '?'} as ${
-			config.user || '(no user)'
-		}`
+/** Normalises `query(a, b, c)` into `{ sql, values, callback }`. */
+function normalizeArgs(args) {
+	let sql;
+	let values = [];
+	let callback;
+	const first = args[0];
+	if (
+		first &&
+		typeof first === 'object' &&
+		!Array.isArray(first) &&
+		typeof first.sql === 'string'
+	) {
+		sql = first.sql;
+	} else {
+		sql = first;
+	}
+	for (let i = 1; i < args.length; i++) {
+		const arg = args[i];
+		if (typeof arg === 'function') callback = arg;
+		else if (Array.isArray(arg)) values = arg;
+		else if (arg === undefined || arg === null) continue;
+		else values = [arg];
+	}
+	if (typeof sql !== 'string') throw new TypeError('con.query() needs a SQL string');
+	return { sql, values: values || [], callback };
+}
+
+function withTimeout(promise, timeout, sqlText) {
+	if (!timeout || !Number.isFinite(timeout)) return promise;
+	let timer;
+	const guard = new Promise((resolve, reject) => {
+		timer = setTimeout(
+			() =>
+				reject(new Error(`Query timed out after ${timeout}ms: ${String(sqlText).slice(0, 120)}`)),
+			timeout
+		);
+		if (typeof timer.unref === 'function') timer.unref();
+	});
+	return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
+async function run(rawSql, values, options = {}) {
+	await client.whenReady();
+	const executor = options.executor || sqlLayer.engine();
+	return withTimeout(
+		executor.execute(rawSql, values || []),
+		options.timeout || queryTimeout,
+		rawSql
 	);
 }
-log.info(
-	`[DATABASE] pool limit=${config.connectionLimit} connectTimeout=${config.connectTimeout}ms`
-);
 
-const pool = mysql.createPool(config);
+function toCallback(promise, callback) {
+	if (typeof callback !== 'function') return promise;
+	promise.then(
+		(result) => callback(null, result, undefined),
+		(err) => callback(err)
+	);
+	return undefined;
+}
 
-/*
- * A pool level error (dropped connection, server restart, auth failure) is an
- * EventEmitter 'error' event. Without a listener Node treats it as an uncaught
- * exception and kills the cluster, so it is handled here.
- */
-pool.on('error', (err) => {
-	log.error(`[DATABASE] pool error: ${err.code || err.name}: ${err.message}`);
-	if (err.code === 'ECONNREFUSED' || err.code === 'EHOSTUNREACH' || err.code === 'ENOTFOUND') {
-		log.error(
-			`[ACTION] ${config.host}:${config.port || 3306} is not reachable from this container — ` +
-				'use the database host/IP as seen from inside Pterodactyl (often 172.18.0.1 or a service name)'
-		);
-	}
-	if (err.code === 'ER_ACCESS_DENIED_ERROR') {
-		log.error(
-			'[ACTION] MySQL rejected the credentials — check MYSQL_USER/MYSQL_PASS or DATABASE_URL'
-		);
-	}
-});
-pool.on('connection', () => {
-	log.debug('mysql: new connection established');
-});
+/* ------------------------------------------------------------------ pool --- */
+
+const pool = {
+	threadId: 0,
+	/** `con.query(sql[, values][, callback])`, see the header comment. */
+	query(...args) {
+		const { sql, values, callback } = normalizeArgs(args);
+		return toCallback(run(sql, values), callback);
+	},
+	getConnection(callback) {
+		const promise = (async () => {
+			await client.whenReady();
+			const store = client.getStore();
+			let session = null;
+			try {
+				session = await store.startSession();
+			} catch (err) {
+				log.warn(`[MONGO] could not open a transaction session: ${err.message}`);
+			}
+			const threadId = ++connectionCounter;
+			const scoped = session ? sqlLayer.withSession(store, session) : null;
+			let released = false;
+			const handle = {
+				threadId,
+				session,
+				query(...queryArgs) {
+					const normalized = normalizeArgs(queryArgs);
+					const promise = withTimeout(
+						scoped
+							? scoped.execute(normalized.sql, normalized.values)
+							: run(normalized.sql, normalized.values),
+						queryTimeout,
+						normalized.sql
+					);
+					return toCallback(promise, normalized.callback);
+				},
+				beginTransaction(cb) {
+					// The session is already started by startSession()
+					if (typeof cb === 'function') return process.nextTick(() => cb(null));
+					return Promise.resolve();
+				},
+				commit(cb) {
+					const promise = (async () => {
+						if (!session) return false;
+						await session.commitTransaction();
+						await session.endSession();
+						released = true;
+						return true;
+					})();
+					return toCallback(promise, cb);
+				},
+				rollback(cb) {
+					const promise = (async () => {
+						if (!session) return false;
+						try {
+							await session.abortTransaction();
+						} finally {
+							await session.endSession();
+							released = true;
+						}
+						return false;
+					})();
+					return toCallback(promise, cb);
+				},
+				release() {
+					if (released) return;
+					released = true;
+					if (session) session.endSession().catch(() => {});
+				},
+			};
+			return handle;
+		})();
+		return toCallback(promise, callback);
+	},
+	end(callback) {
+		const promise = client.close();
+		return toCallback(promise, callback);
+	},
+};
+
+/* ---------------------------------------------------------------- exports --- */
 
 exports.con = pool;
 exports.pool = pool;
-exports.mysql = mysql;
-exports.config = config;
+exports.config = {
+	driver: 'mongodb',
+	database: 'see MONGODB_URI',
+	tables: Object.keys(loadSchema()).length,
+	queryTimeout,
+};
+// Kept so old code that only checks for the field does not crash
+exports.mysql = undefined;
+
+exports.query = function (sql, values = []) {
+	return run(sql, values);
+};
 
 exports.close = function () {
-	return new Promise((resolve) => {
-		try {
-			pool.end((err) => {
-				if (err) log.warn(`mysql pool did not close cleanly: ${err.message}`);
-				resolve();
-			});
-		} catch (err) {
-			log.warn(`mysql pool close failed: ${err.message}`);
-			resolve();
-		}
-	});
+	return client.close().catch((err) => log.warn(`[MONGO] close failed: ${err.message}`));
 };

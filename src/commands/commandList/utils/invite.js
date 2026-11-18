@@ -27,14 +27,20 @@ module.exports = new CommandInterface({
 	six: 500,
 
 	execute: async function (p) {
-		let link = p.config.invitelink;
-		let embed = {
-			title: 'OwO! Click me to invite me to your server!',
+		// Built from this bot's own application id, so a fork never sends users to
+		// the upstream bot. `config.invitelink` is only a fallback for the case
+		// where the client is not ready yet.
+		const clientId = p.bot?.user?.id || '';
+		const link = clientId
+			? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
+			: String(p.config.invitelink || '').replace('{CLIENT_ID}', '');
+		const icon = p.bot?.user?.avatarURL || undefined;
+		const embed = {
+			title: 'Click here to invite OCEAN to your server!',
 			url: link,
+			description: `Need help or want to hang out? Join us: ${p.config.guildlink}`,
 			color: p.config.embed_color,
-			thumbnail: {
-				url: 'https://cdn.discordapp.com/app-icons/408785106942164992/00d934dce5e41c9e956aca2fd3461212.png',
-			},
+			thumbnail: icon ? { url: icon } : undefined,
 		};
 		p.send({ embed });
 	},

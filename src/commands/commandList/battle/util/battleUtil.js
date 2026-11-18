@@ -41,8 +41,8 @@ function reportPgidError(err) {
 		}) — battle team ids stay at 0`
 	);
 	log.error(
-		'[ACTION] check DATABASE_URL (mysql://user:pass@host:3306/owo) or MYSQL_HOST/MYSQL_USER/MYSQL_PASS; ' +
-			'the host must be reachable from inside the container (not 127.0.0.1)'
+		'[ACTION] check MONGODB_URI (mongodb+srv://user:pass@cluster.mongodb.net/ocean) and the ' +
+			'Network Access allowlist in MongoDB Atlas (0.0.0.0/0 for Pterodactyl hosts)'
 	);
 }
 

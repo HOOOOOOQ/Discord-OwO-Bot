@@ -1,203 +1,57 @@
-const redis = require('redis');
-const log = require('./log.js');
-const { resolveRedis } = require('./dbUrl.js');
+/*
+ * OwO Bot for Discord
+ * Copyright (C) 2019 Christopher Thai
+ * This software is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+ * For more information, see README.md and LICENSE
+ */
 
-// REDIS_URL wins over the legacy REDIS_HOST/REDIS_PASS variables.
-const connection = resolveRedis();
+/**
+ * Kept under the old name and with the old function names so the ~460 call
+ * sites (`p.redis.hget(...)`, `redis.hincrby(...)`, `levels.getTop(...)`) do
+ * not change. The implementation is now MongoDB (`src/utils/kv.js`) — there is
+ * no Redis server, no `redis` npm package and no `REDIS_URL`.
+ *
+ * Semantics that commands rely on are preserved exactly:
+ *   - `hget`        → value or null
+ *   - `hgetall`     → plain object
+ *   - `hincrby`     → the new number (was a string from Redis, now a number)
+ *   - `incr`        → ZINCRBY on a sorted set, returns the new score
+ *   - `getTop`      → [member, 'score', member, 'score', ...] in DESC order
+ *   - `getRank`     → 0-based DESC position (Redis ZREVRANK)
+ *   - `expire`      → sets a TTL (default 3 days, as before)
+ */
 
-// node_redis v2 reconnects on its own; the strategy only caps the backoff so a
-// dead Redis cannot spin the CPU or give up permanently.
-const retryStrategy = function (options) {
-	const delay = Math.min(options.attempt * 200, 5000);
-	log.warn(`redis: reconnecting in ${delay}ms (attempt ${options.attempt})`);
-	return delay;
-};
+const kv = require('./kv.js');
 
-const client = redis.createClient({
-	host: connection.host,
-	port: connection.port,
-	password: connection.password,
-	db: connection.db,
-	tls: connection.tls ? {} : undefined,
-	retry_strategy: retryStrategy,
-});
+exports.hget = (key, field) => kv.hget(key, field);
+exports.hset = (key, field, value = 1) => kv.hset(key, field, value);
+exports.hdel = (key, field) => kv.hdel(key, field);
+exports.hmget = (key, fields) => kv.hmget(key, fields);
+exports.hmset = (key, values) => kv.hmset(key, values);
+exports.hgetall = (key) => kv.hgetall(key);
+exports.hincrby = (key, field, amount = 1) => kv.hincrby(key, field, amount);
 
-exports.incr = function (key, value = 1) {
-	return new Promise(function (res, rej) {
-		client.incrby(key, value, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
+/* Sorted sets / leaderboards */
+exports.incr = (table, member, amount = 1) => kv.zincrby(table, member, amount);
+exports.zscore = (table, member) => kv.zscore(table, member);
+exports.getXP = (table, member) => kv.zscore(table, member);
+exports.getRank = (table, member) => kv.zrevrank(table, member);
+exports.getTop = (table, count = 5) => kv.zrevrange(table, 0, count - 1);
+exports.getRange = (table, min, max) => kv.zrevrange(table, min, max);
+exports.zrem = (table, member) => kv.zrem(table, member);
 
-exports.hgetall = function (key) {
-	return new Promise(function (res, rej) {
-		client.hgetall(key, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hget = function (table, key) {
-	return new Promise(function (res, rej) {
-		client.hget(table, key, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hset = function (table, key, val = 1) {
-	return new Promise(function (res, rej) {
-		client.hset(table, key, val, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hdel = function (table, key) {
-	return new Promise(function (res, rej) {
-		client.hdel(table, key, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hmget = function (key, field) {
-	return new Promise(function (res, rej) {
-		client.hmget(key, field, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hmset = function (key, val) {
-	return new Promise(function (res, rej) {
-		client.hmset(key, val, function (err, val) {
-			if (err) rej(err);
-			else res(val);
-		});
-	});
-};
-
-exports.hincrby = function (table, key, val = 1) {
-	return new Promise(function (res, rej) {
-		client.hincrby(table, key, val, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.incr = function (table, key, val = 1) {
-	return new Promise(function (res, rej) {
-		client.zincrby(table, val, key, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.getTop = function (table, count = 5) {
-	return new Promise(function (res, rej) {
-		client.zrevrange(table, 0, count - 1, 'WITHSCORES', function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.getRange = function (table, min, max) {
-	return new Promise(function (res, rej) {
-		client.zrevrange(table, min, max, 'WITHSCORES', function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.zscore = function (table, id) {
-	return new Promise(function (res, rej) {
-		client.zscore(table, id, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.getXP = function (table, id) {
-	return new Promise(function (res, rej) {
-		client.zscore(table, id, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.getRank = function (table, id) {
-	return new Promise(function (res, rej) {
-		client.zrevrank(table, id, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.sadd = function (table, value) {
-	return new Promise(function (res, rej) {
-		client.sadd(table, value, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.del = function (table) {
-	return new Promise(function (res, rej) {
-		client.del(table, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.expire = function (key, timer = 259200) {
-	// 3 days
-	return new Promise(function (res, rej) {
-		client.expire(key, timer, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-exports.zrem = function (table, key) {
-	return new Promise(function (res, rej) {
-		client.zrem(table, key, function (err, reply) {
-			if (err) rej(err);
-			else res(reply);
-		});
-	});
-};
-
-client.on('connect', function () {
-	//console.log('Redis connected');
-});
-
-client.on('error', function (err) {
-	console.error('Redis error on ' + new Date().toLocaleString());
-	console.error(err);
-});
-exports.client = client;
+/* Sets, keys, TTL */
+exports.sadd = (table, value) => kv.sadd(table, value);
+exports.del = (key) => kv.del(key);
+exports.expire = (key, seconds = 259200) => kv.expire(key, seconds);
+exports.get = (key) => kv.get(key);
+exports.set = (key, value) => kv.set(key, value);
+exports.exists = (key) => kv.exists(key);
 
 exports.close = function () {
-	return new Promise((resolve) => {
-		if (!client.connected && !client.ready) return resolve();
-		client.quit(() => resolve());
-	});
+	// The MongoDB connection is owned by src/utils/mongo/client.js
+	return Promise.resolve();
 };
+
+/** Housekeeping: drop expired keys (called by the bot on an interval). */
+exports.purgeExpired = () => kv.purgeExpired();

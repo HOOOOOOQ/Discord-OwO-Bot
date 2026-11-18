@@ -8,10 +8,11 @@
 /**
  * Container health check.
  *
- * Verifies that the dependencies the bot cannot run without (MySQL and Redis)
- * still accept connections. Exits 0 when healthy, 1 otherwise.
- * The bot token / Discord gateway state is not probed: the sharder owns that
- * connection and a transient gateway reconnect is not unhealthy.
+ * The bot needs exactly two external things: a Discord token (the sharder owns
+ * that socket, and a transient gateway reconnect is not unhealthy) and the
+ * MongoDB Atlas connection. This script checks the MongoDB URI syntax and, when
+ * the cluster host is directly reachable, opens a TCP connection to it.
+ * Exits 0 when healthy, 1 otherwise.
  */
 
 const net = require('node:net');
@@ -34,20 +35,27 @@ function probe(host, port) {
 }
 
 (async () => {
-	const { resolveMysql, resolveRedis } = require('../src/utils/dbUrl.js');
-	// Respects DATABASE_URL / REDIS_URL as well as the legacy variables.
-	const mysqlConnection = resolveMysql();
-	const redisConnection = resolveRedis();
-	const [mysql, redis] = await Promise.all([
-		probe(mysqlConnection.host, mysqlConnection.port || 3306),
-		probe(redisConnection.host, redisConnection.port || 6379),
-	]);
+	const mongoClient = require('../src/utils/mongo/client.js');
+	const uri = mongoClient.readUri();
+	const info = mongoClient.inspectUri(uri);
+	if (!info.ok) {
+		console.error(`unhealthy mongodb=${info.reason}`);
+		process.exit(1);
+	}
 
-	const summary = `mysql=${mysql.ok ? 'ok' : mysql.reason} redis=${redis.ok ? 'ok' : redis.reason}`;
-	if (mysql.ok && redis.ok) {
-		console.log(`healthy ${summary}`);
+	// `mongodb+srv://` hides the real hosts behind DNS SRV records, so a TCP
+	// probe is only done when the URI lists an explicit host:port.
+	if (info.scheme === 'mongodb+srv') {
+		console.log(`healthy mongodb=srv:${info.host}/${info.database}`);
 		process.exit(0);
 	}
-	console.error(`unhealthy ${summary}`);
+
+	const [hostPart, portPart] = String(info.host).split(',')[0].split(':');
+	const result = await probe(hostPart, Number.parseInt(portPart, 10) || 27017);
+	if (result.ok) {
+		console.log(`healthy mongodb=${hostPart}:${portPart || 27017}/${info.database}`);
+		process.exit(0);
+	}
+	console.error(`unhealthy mongodb=${result.reason}`);
 	process.exit(1);
 })();

@@ -13,11 +13,11 @@ function fakeClient() {
 	};
 }
 
-test('defaults are online + playing "OCEAN BOT"', () => {
+test('defaults are online + watching the support server', () => {
 	const resolved = presence.resolve({});
 	assert.strictEqual(resolved.status, 'online');
-	assert.strictEqual(resolved.type, 'playing');
-	assert.strictEqual(resolved.text, 'OCEAN BOT');
+	assert.strictEqual(resolved.type, 'watching');
+	assert.strictEqual(resolved.text, 'discord.gg/666family');
 	assert.strictEqual(resolved.refreshMs, 0);
 	assert.deepStrictEqual(resolved.warnings, []);
 });
@@ -118,5 +118,6 @@ test('refresh keeps the presence updated', async () => {
 	await new Promise((resolve) => setTimeout(resolve, 1100));
 	stop();
 	assert.ok(client.calls.length >= 1);
-	assert.deepStrictEqual(client.calls[0].activities, [{ name: '5 servers', type: 0 }]);
+	// default activity type is now "watching" (3)
+	assert.deepStrictEqual(client.calls[0].activities, [{ name: '5 servers', type: 3 }]);
 });

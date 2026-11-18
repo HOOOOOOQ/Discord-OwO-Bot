@@ -91,10 +91,13 @@ function stubInfrastructure() {
 		on: function () {},
 	};
 
+	// The bot stores everything in MongoDB now; the registry check only needs the
+	// module to exist so the command tree can be required offline.
 	stub(path.join(__dirname, '../src/utils/mysql.js'), {
 		con: fakePool,
 		pool: fakePool,
-		mysql: require('mysql'),
+		config: { driver: 'stub' },
+		query: async () => [],
 		close: async () => {},
 	});
 

@@ -28,7 +28,7 @@ if (process.argv.includes('--verify')) {
 }
 
 // `node index.js --doctor` prints a read-only self-check (token, privileged
-// intents, shard source, DATABASE_URL/REDIS_URL reachability) and exits. It
+// intents, shard source, MONGODB_URI reachability) and exits. It
 // never starts a shard, so it is safe to run on a live panel.
 if (process.argv.includes('--doctor')) {
 	// --connect additionally performs a real gateway login (opens a session).
@@ -122,7 +122,7 @@ function watchWorkers() {
 				`[ERROR] worker ${worker.id} died ${
 					now - startedAt
 				}ms after fork — it never had time to reach READY. ` +
-					'The failure is above this line (token/intents/secret files/DATABASE_URL), not in the gateway.'
+					'The failure is above this line (token/intents/secret files/MONGODB_URI), not in the gateway.'
 			);
 		}
 		if (exits.length >= 4) {
@@ -356,6 +356,26 @@ function superviseGateway(workerCount, sharder) {
 				);
 				log.error(`[ACTION] ${diagnostics.DEV_PORTAL_HINT}`);
 			}
+		}
+
+		// ------------------------------------------------------------------
+		// MongoDB must be reachable BEFORE the gateway connects. eris-sharder
+		// calls bot.connect() first and only instantiates src/owo.js on READY,
+		// so without this pre-flight a dead database looked exactly like "bot
+		// online, every command silent" (and the old MySQL version crashed 2 s
+		// after READY). Fail here, loudly, before any socket is opened.
+		// ------------------------------------------------------------------
+		const mongoClient = require('./src/utils/mongo/client.js');
+		try {
+			await mongoClient.connect();
+		} catch (err) {
+			log.error(`[MONGO] ${err.message}`);
+			if (err.action) log.error(`[ACTION] ${err.action}`);
+			log.error(
+				'[FATAL] MongoDB is the only datastore — the bot cannot answer a single command ' +
+					'without it. Fix MONGODB_URI and start again (exiting with code 1, no restart loop).'
+			);
+			process.exit(1);
 		}
 
 		if (cluster.isMaster) {

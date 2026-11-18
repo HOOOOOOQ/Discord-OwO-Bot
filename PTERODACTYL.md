@@ -21,8 +21,8 @@ Dua file di repo ini dipakai:
 
 - Pterodactyl **1.x** (panel + Wings) yang sudah jalan.
 - Node.js **20** di image (sudah disediakan), Docker di node Wings.
-- **MariaDB 10.6+ / MySQL 8** dan **Redis 6+** — boleh di host yang sama dengan
-  Wings, tapi **bukan** di dalam container bot (lihat bagian 5).
+- **MongoDB Atlas** (gratis M0) — tidak ada database lain yang perlu dipasang
+  (lihat bagian 5). Tidak perlu MySQL, MariaDB, atau Redis.
 - RAM server: **≥ 1.5 GB** (disarankan 2 GB), disk **≥ 3 GB** (node_modules dan
   hasil kompilasi canvas cukup besar).
 - Allocation/port apa pun boleh (bot tidak listening ke port; port hanya syarat
@@ -125,79 +125,58 @@ lalu keluar dengan exit code 0/1, tanpa menyalakan sharder.
 
 ---
 
-## 5. Database & Redis
+## 5. Database (MongoDB Atlas)
 
-Container bot **tidak bisa** menghubungi `127.0.0.1` milik host — itu loopback
-container itu sendiri. Pakai IP jembatan Docker (biasanya `172.18.0.1`) atau IP
-publik host, atau server DB terpisah.
+Bot **hanya** butuh MongoDB. Tidak ada MySQL/MariaDB/Redis yang perlu dipasang,
+tidak ada file SQL yang perlu di-import: tabel, kolom, primary key dan index
+dibuat otomatis dari definisi di `secret/CREATE-OWO-TABLES.sql` saat pertama
+kali jalan.
 
-### MariaDB
+1. https://cloud.mongodb.com → **Create** → **M0 Free** → region terdekat.
+2. **Database Access → Add New Database User** (simpan username + password).
+3. **Network Access → Add IP Address → Allow Access from Anywhere** (`0.0.0.0/0`).
+   Wajib, karena IP host Pterodactyl berubah-ubah.
+4. **Clusters → Connect → Drivers → Node.js**, salin URI, lalu tambahkan nama
+   database sebelum `?`:
 
-```bash
-# di host
-mysql -u root -p -e "CREATE DATABASE owo CHARACTER SET utf8mb4;"
-mysql -u root -p owo < /path/ke/repo/secret/CREATE-OWO-TABLES.sql
-mysql -u root -p -e "CREATE USER 'owo'@'172.18.%' IDENTIFIED BY 'PASSWORD_KUAT';
-GRANT ALL PRIVILEGES ON owo.* TO 'owo'@'172.18.%'; FLUSH PRIVILEGES;"
-```
+   ```
+   mongodb+srv://ocean:PASSWORD@cluster0.abcde.mongodb.net/ocean?retryWrites=true&w=majority
+   ```
 
-Kalau memakai `.env`, semua info ini cukup dirangkum jadi
-`DATABASE_URL=mysql://owo:PASSWORD_KUAT@172.18.0.1:3306/owo`.
+Password dengan karakter `@ : / ;` harus di-encode (`%40 %3A %2F %3B`).
 
-`/etc/mysql/mariadb.conf.d/50-server.cnf`:
-
-```ini
-bind-address = 0.0.0.0
-```
-
-Pastikan port 3306 tidak terbuka ke internet (firewall hanya untuk `172.18.0.0/16`).
-
-### Redis
-
-```bash
-# /etc/redis/redis.conf (atau /etc/redis.conf)
-bind 0.0.0.0
-protected-mode yes
-requirepass PASSWORD_REDIS
-```
-
-Lalu isi di `.env`: `REDIS_URL=redis://:PASSWORD_REDIS@172.18.0.1:6379/0` (atau
-`REDIS_PASS` kalau memakai variabel manual). Redis **wajib** karena prefix
-per-server, cooldown, dan pub/sub lewat Redis.
+Kalau App Connect/Network Access salah, bot menulis
+`[MONGO] could not connect … after 5 attempt(s)` beserta `[ACTION]` yang
+menyebut langkah perbaikannya, lalu keluar dengan exit code 1 (tidak restart
+loop tanpa henti).
 
 ---
 
 ## 6. `.env`
 
-Buat `.env` di root server (File Manager). **Enam baris ini cukup**:
+Buat `.env` di root server (File Manager). **Tiga baris ini cukup**:
 
 ```ini
 BOT_TOKEN=token_bot_dari_developer_portal
-OWNER_IDS=123456789012345678
-
-DATABASE_URL=mysql://owo:PASSWORD_KUAT@172.18.0.1:3306/owo
-REDIS_URL=redis://:PASSWORD_REDIS@172.18.0.1:6379/0
-
+MONGODB_URI=mongodb+srv://ocean:PASSWORD@cluster0.abcde.mongodb.net/ocean
 PREFIX=o
-CLUSTERS=2
 ```
 
 Catatan:
 
-- `DATABASE_URL` → `mysql://USER:PASSWORD@HOST:PORT/DATABASE` (skema
-  `mariadb://` juga diterima). Password dengan karakter khusus harus di-encode:
-  `@` → `%40`, `:` → `%3A`, `#` → `%23`.
-- `REDIS_URL` → `redis://:PASSWORD@HOST:PORT/DB` (pakai `rediss://` kalau Redis
-  pakai TLS). Tanpa password: `redis://172.18.0.1:6379`.
-- **Tidak ada MongoDB** di project ini — databasenya MySQL/MariaDB.
-- Cara lama (`MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASS`, `MYSQL_DATABASE`,
-  `REDIS_HOST`, `REDIS_PASS`) masih jalan dan dipakai kalau URL tidak diisi.
-  Kalau dua-duanya diisi, **URL yang menang**.
-- Variabel panel (`CLUSTERS`, `PREFIX`, `OWNER_IDS`) menang atas `.env`, karena
-  dotenv tidak menimpa env yang sudah ada.
+- `MONGODB_URI` wajib berformat `mongodb://` atau `mongodb+srv://`. Nilai
+  `mysql://`/`mariadb://` ditolak dengan pesan yang jelas.
+- **Tidak ada `DATABASE_URL` atau `REDIS_URL`.** Kalau variabel lama masih ada di
+  panel, bot mengabaikannya dan `--doctor` menampilkan peringatan
+  `legacy variables`.
+- `PREFIX` default `o`; per server bisa diubah dengan `o prefix <baru>`
+  (tersimpan di MongoDB, tetap ada setelah restart).
+- Preset target: `PREFIX=o DEBUG=false CLUSTERS=1`.
+- `DEBUG=true` hanya menjawab guild di `DEBUG_WHITELIST`; kalau whitelist kosong,
+  **tidak ada** guild yang dijawab.
+- Variabel panel menang atas `.env` (dotenv tidak menimpa env yang sudah ada).
 - `ALLOW_EVAL=false` dan `DEBUG=false` sudah default; jangan dinyalakan di
-  server publik. Opsi lain (cowoncy grant, sharder, integrasi) ada di
-  `.env.example` — semuanya opsional.
+  server publik. Opsi lain ada di `.env.example` — semuanya opsional.
 
 Tanpa `BOT_TOKEN` proses langsung exit (exit code 1) — itu normal dan terlihat
 di console.
@@ -230,7 +209,7 @@ node index.js --doctor
 (ubah sementara _Startup Command_ server menjadi `node index.js --doctor`, klik
 Start, lalu kembalikan ke `node index.js`). Output-nya menunjukkan token valid
 atau tidak, MESSAGE CONTENT INTENT nyala atau tidak, sumber jumlah shard, serta
-apakah `DATABASE_URL`/`REDIS_URL` bisa dijangkau. Lihat bagian 9c kalau bot
+apakah `MONGODB_URI` valid dan bisa dijangkau. Lihat bagian 9c kalau bot
 terlihat offline atau command tidak dijawab.
 
 ---
@@ -241,8 +220,9 @@ terlihat offline atau command tidak dijawab.
 2. **Reinstall Server** (menjalankan `npm ci` lagi).
 3. Start.
 
-Database tidak perlu di-import ulang — `CREATE-OWO-TABLES.sql` hanya untuk
-instalasi pertama, dan tidak ada migrasi yang menghapus data.
+Data ada di MongoDB Atlas dan tidak tersentuh oleh update. Tidak ada file SQL
+untuk di-import; definisi tabel dibaca dari `secret/CREATE-OWO-TABLES.sql` dan
+collection/index dibuat otomatis.
 
 ---
 
@@ -252,13 +232,14 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Install gagal: `cairo.h: No such file` / `node-gyp` error            | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.                                                                            |
 | Start tapi crash `Cannot find module 'canvas'`                       | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama.                                                                    |
-| `ECONNREFUSED 127.0.0.1:3306` / Redis                                | `MYSQL_HOST`/`REDIS_HOST` masih `localhost`. Pakai `172.18.0.1` atau IP host; cek `bind-address`/`bind` dan firewall.                                                                                                          |
+| `[MONGO] could not connect … after 5 attempt(s)`                     | URI salah, user/password salah, atau IP belum di-allow. Atlas → Network Access → `0.0.0.0/0`; pastikan nama database ada di URI (`/ocean`).                                                                                      |
 | Server mati sendiri, log `heap out of memory`                        | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                                                                                        |
 | Panel tetap "Starting" walau bot online                              | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                                                                                      |
 | Command memegen error `Could not grab drake.jpg`                     | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                                                                                           |
 | Install berhenti di `verify:commands`                                | Registry command gagal dimuat (file kurang / `node_modules` korup). Cek log install, upload ulang file yang kurang, lalu Reinstall lagi.                                                                                       |
-| Bot online 1–2 detik lalu restart terus (`worker died … after fork`) | Kesalahan database saat modul command di-require. Sejak perbaikan ini tidak lagi mematikan cluster: cari `[DATABASE] could not read pet_team.pgid` + baris `[ACTION]`, lalu perbaiki `DATABASE_URL`.                           |
-| `mysql: DATABASE_URL is invalid` di log                              | Format URL salah (skema bukan `mysql://`/`mariadb://`, atau password belum di-encode). Bot otomatis jatuh ke `MYSQL_*`; perbaiki URL atau isi variabel manual.                                                                 |
+| Bot online 1–2 detik lalu restart terus (`worker died … after fork`) | Kesalahan database saat modul command di-require. Sejak perbaikan ini tidak lagi mematikan cluster: cari `[DATABASE]` + baris `[ACTION]`, lalu perbaiki `MONGODB_URI`.                                                            |
+| `MONGODB_URI is not set` / `unsupported scheme "mysql:"`             | Variabel belum diisi, atau masih memakai URL MySQL lama. Isi `MONGODB_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/ocean`.                                                                                                    |
+| `legacy variables` di `--doctor`                                     | `DATABASE_URL`/`REDIS_URL`/`MYSQL_*`/`REDIS_*` masih ada di panel. Bot mengabaikannya; hapus supaya tidak membingungkan.                                                                                                        |
 | `node-pre-gyp ... 404 ... canvas-v2.11.2-node-v141`                  | Node di image terlalu baru (mis. v25): canvas 2.11.2 tidak punya prebuilt untuk ABI itu. Sejak perbaikan ini `canvas` **opsional**, jadi install tetap sukses dan bot tetap jalan (memegen mati).                              |
 | `pkg-config: not found` / `binding.gyp` gagal                        | Image tidak punya cairo/pango/pkg-config untuk mengompilasi canvas. Bot tetap jalan tanpa memegen; pakai image `pterodactyl/Dockerfile` kalau butuh memegen.                                                                   |
 | `git dep preparation failed`                                         | Dulu disebabkan `merge-images` (git dep) yang punya devDependency `canvas`; dependensi itu sudah dihapus dari repo. Kalau masih muncul, periksa akses git/HTTPS node ke GitHub.                                                |
@@ -652,5 +633,7 @@ cairo/pango/pixman/dev headers) dan jalankan dengan **Node 20**, karena canvas
 
 ## Alternatif tanpa Pterodactyl
 
-`docker-compose.yml` di repo ini sudah menyiapkan bot + MariaDB + Redis dalam
-satu stack (`docker compose up -d --build`) — lihat [DEPLOYMENT.md](DEPLOYMENT.md).
+`docker-compose.yml` di repo ini hanya menjalankan bot (`docker compose up -d
+--build`); database-nya tetap MongoDB Atlas, atau aktifkan service `mongo` yang
+dikomentari di file itu untuk MongoDB lokal — lihat [DEPLOYMENT.md](DEPLOYMENT.md)
+dan panduan lengkap berbahasa Indonesia di [README.id.md](README.id.md).
