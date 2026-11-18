@@ -127,7 +127,7 @@ Startup logs tell you what was decided:
 discord: token ok — Ocean#5352 (id 1571…)
 discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
 [CLUSTER] worker 1 forked / [CLUSTER] worker 1 online
-[GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+[GATEWAY] connecting with presence online — playing "OCEAN BOT" (attempt 1)
 [CLUSTER] worker 1 online
 [GATEWAY] stage process_started — pid 2519 isWorker=true
 [CLUSTER] worker 1 gateway stage process_started — pid 2519 isWorker=true
@@ -144,8 +144,8 @@ discord: application OCEAN (id 1571…); MESSAGE CONTENT INTENT enabled
 [SHARD] shard 0 READY after 412ms
 [GATEWAY] all shards READY — 1 shard(s), 1 guild(s)
 [STATE] BOT_ONLINE — 1 shard(s), 1 guild(s)
-[STATE] PRESENCE_SYNCHRONIZED — status=online playing "o help"
-bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
+[STATE] PRESENCE_SYNCHRONIZED — status=online playing "OCEAN BOT"
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "OCEAN BOT")
 Bot is online. Commands accept the prefix "o" (try "ohelp")
 [HEALTH] OCEAN IS ONLINE — Ocean#5352
 ```

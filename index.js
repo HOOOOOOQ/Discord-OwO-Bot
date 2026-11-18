@@ -77,6 +77,7 @@ const buildInfo = require('./src/utils/buildInfo.js');
 const tokenUtil = require('./src/utils/token.js');
 const gatewayProbe = require('./src/utils/gatewayProbe.js');
 const gatewayBoot = require('./src/utils/gatewayBoot.js');
+const shardAssignment = require('./src/utils/shardAssignment.js');
 const diagnostics = require('./src/utils/diagnostics.js');
 
 var shards, firstShardID, lastShardID;
@@ -141,7 +142,7 @@ function watchWorkers() {
  * reports connect(), the master says so explicitly: a worker that is "online" is
  * not a bot that is online.
  */
-function superviseGateway(workerCount) {
+function superviseGateway(workerCount, sharder) {
 	const startedAt = Date.now();
 	const stages = new Map();
 	cluster.on('message', (worker, message) => {
@@ -153,6 +154,82 @@ function superviseGateway(workerCount) {
 				(message.detail ? ` — ${message.detail}` : '')
 		);
 	});
+
+	// ---- shard assignment delivery -----------------------------------------
+	// eris-sharder's own queue is the only thing that makes a worker create an
+	// Eris client, and a throw inside its async nextTick callback is swallowed.
+	// Deliver the same message ourselves for every cluster that has not
+	// acknowledged it, verify with the worker's stage beacon, and never send a
+	// second copy once a worker is connected.
+	const acknowledged = new Set();
+	const deliveries = new Map();
+	cluster.on('message', (worker, message) => {
+		if (!message || message.name !== 'oceanStage') return;
+		if (message.stage !== 'ipc_connect_received' && message.stage !== 'connect_called') return;
+		const clusterId = Number.isInteger(message.clusterId) ? message.clusterId : null;
+		if (clusterId === null || acknowledged.has(clusterId)) return;
+		acknowledged.add(clusterId);
+		// The worker owns the assignment now: remove eris-sharder's queued copy so it
+		// can never be delivered twice (a second connect = a second Eris client).
+		if (shardAssignment.dropQueuedAssignment(sharder, clusterId)) {
+			log.debug(`[CLUSTER] dropped eris-sharder's duplicate assignment for cluster ${clusterId}`);
+		}
+	});
+
+	/**
+	 * When eris-sharder may be bypassed.
+	 *
+	 * - nothing has been delivered to any worker  → the library's queue is dead,
+	 *   deliver immediately (this is the outage that was reported);
+	 * - another cluster is already connected      → eris-sharder is alive and is
+	 *   serialising the remaining clusters on purpose (to respect Discord's
+	 *   identify concurrency), so only step in when it has been stuck for a while.
+	 */
+	const mayTakeOver = () => {
+		if (acknowledged.size === 0) return true;
+		return Date.now() - startedAt > 12000;
+	};
+
+	const attempt = () => {
+		let report;
+		try {
+			report = shardAssignment.deliverPending({
+				sharder,
+				workers: cluster.workers,
+				acknowledged,
+				filter: mayTakeOver,
+			});
+		} catch (err) {
+			log.error(`[CLUSTER] could not read eris-sharder's cluster plan: ${err.message}`);
+			return false;
+		}
+		for (const entry of report.attempted) {
+			const previous = (deliveries.get(entry.clusterId) || 0) + 1;
+			deliveries.set(entry.clusterId, previous);
+			if (entry.ok) {
+				log.warn(
+					`[CLUSTER] sent the shard assignment for cluster ${entry.clusterId} (shards ` +
+						`${entry.firstShardID}~${entry.lastShardID}) to worker ${entry.workerId} directly — ` +
+						`eris-sharder did not deliver it (attempt ${previous})`
+				);
+			} else {
+				log.error(
+					`[CLUSTER] could not send the shard assignment to worker ${entry.workerId}: ${entry.error}` +
+						(entry.code ? ` (${entry.code})` : '')
+				);
+			}
+		}
+		return report.delivered > 0;
+	};
+
+	// First attempt as soon as the plan exists, then retries with backoff.
+	// 1.5 s is already ~1000x the time eris-sharder's own send needs, so a healthy
+	// library is never raced; the later attempts cover a queue that dies later.
+	const attempts = [1500, 3000, 6000, 12000, 14000];
+	for (const delay of attempts) {
+		const t = setTimeout(() => attempt(), delay + 250);
+		if (typeof t.unref === 'function') t.unref();
+	}
 
 	const timeoutMs = gatewayBoot.connectTimeoutMs(process.env) + 5000;
 	const timer = setTimeout(() => {
@@ -349,7 +426,7 @@ function superviseGateway(workerCount) {
 
 		if (cluster.isMaster) {
 			watchWorkers();
-			superviseGateway(config.clusters);
+			superviseGateway(config.clusters, sharder);
 			// eris-sharder fills its cluster map inside process.nextTick, so the plan is
 			// only complete a moment later.
 			const planTimer = setTimeout(() => {
@@ -366,7 +443,12 @@ function superviseGateway(workerCount) {
 						return `cluster ${id} → worker ${info.workerID}, shards ${range}`;
 					})
 					.join(', ');
-				log.info(`[SHARD] plan: ${plan}`);
+				const queue = shardAssignment.queueState(sharder);
+				log.info(
+					`[SHARD] plan: ${plan} (eris-sharder queue: ${queue.pending} pending` +
+						(queue.pending ? ` [${queue.clusters.join(', ')}]` : '') +
+						')'
+				);
 			}, 500);
 			if (typeof planTimer.unref === 'function') planTimer.unref();
 			rateLimitUtil.init(sharder.bucket, debug);

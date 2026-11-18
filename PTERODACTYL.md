@@ -304,7 +304,7 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 > [GATEWAY] stage ipc_connect_received — cluster 0, shards 0~0 of 1
 > [SHARD] plan: cluster 0 → worker 1, shards 0~0
 > [GATEWAY] stage connect_called — Client at 9ms
-> [GATEWAY] connecting with presence online — playing "o help" (attempt 1)
+> [GATEWAY] connecting with presence online — playing "OCEAN BOT" (attempt 1)
 > [STATE] HELLO_RECEIVED — shard=0 heartbeat_interval=41250ms
 > [GATEWAY] shard 0 socket open — sent IDENTIFY, waiting for READY
 > [STATE] IDENTIFY_SENT — shard=0 intents=130813 presence=online shard=[0/1]
@@ -313,8 +313,8 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 > [SHARD] shard 0 READY after 412ms
 > [GATEWAY] all shards READY — 1 shard(s), 1 guild(s)
 > [STATE] BOT_ONLINE — 1 shard(s), 1 guild(s)
-> [STATE] PRESENCE_SYNCHRONIZED — status=online playing "o help"
-> bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
+> [STATE] PRESENCE_SYNCHRONIZED — status=online playing "OCEAN BOT"
+> bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "OCEAN BOT")
 > Bot is online. Commands accept the prefix "o" (try "ohelp")
 > [HEALTH] OCEAN IS ONLINE — Ocean#5352
 > ```
@@ -406,13 +406,32 @@ membedakan "kode baru gagal" dari "kode lama masih jalan".
 tahap startup dicetak, dan kalau macet dalam 15 detik panel akan menyebut tahap
 yang tidak pernah tercapai:
 
-| Baris terakhir yang terlihat             | Artinya                                                                 | Yang harus dilakukan                                                                |
-| ---------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `[BOOT] worker …` lalu tidak ada apa pun | master tidak mengirim pesan `connect` (IPC)                             | `[GATEWAY] CONNECTION NOT STARTED` + `[DIAG]` akan muncul; kirim log itu            |
-| `[GATEWAY] CONNECTION NOT STARTED`       | tidak ada Eris client / `connect()` tidak pernah dipanggil              | lihat baris `[DIAG]` tepat di bawahnya (apakah `ipc_connect_received` ada)          |
-| `[GATEWAY] WEBSOCKET NOT OPENED`         | `connect()` jalan tapi socket ke Discord tidak pernah terbuka           | DNS/IPv6 atau egress 443 diblokir — jalankan `node index.js --doctor` (baris probe) |
-| `[GATEWAY] READY TIMEOUT`                | socket terbuka, tapi Discord tidak menyelesaikan IDENTIFY/READY         | lihat kode close: 4004 token, 4014 intent, 4010/4011 shard                          |
-| `[GATEWAY] probe failed: …` (saat boot)  | WebSocket ke `gateway.discord.gg` gagal padahal REST (`discord.com`) OK | host menutup WebSocket keluar / IPv6 rusak: biarkan `GATEWAY_IPV4_FIRST=true`       |
+| Baris terakhir yang terlihat             | Artinya                                                                     | Yang harus dilakukan                                                                |
+| ---------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `[BOOT] worker …` lalu tidak ada apa pun | master tidak mengirim pesan `connect` (IPC) — versi ini mengirimnya sendiri | tunggu `[CLUSTER] sent the shard assignment … directly` (self-heal)                 |
+| `[GATEWAY] CONNECTION NOT STARTED`       | tidak ada Eris client / `connect()` tidak pernah dipanggil                  | lihat baris `[DIAG]` tepat di bawahnya (apakah `ipc_connect_received` ada)          |
+| `[GATEWAY] WEBSOCKET NOT OPENED`         | `connect()` jalan tapi socket ke Discord tidak pernah terbuka               | DNS/IPv6 atau egress 443 diblokir — jalankan `node index.js --doctor` (baris probe) |
+| `[GATEWAY] READY TIMEOUT`                | socket terbuka, tapi Discord tidak menyelesaikan IDENTIFY/READY             | lihat kode close: 4004 token, 4014 intent, 4010/4011 shard                          |
+| `[GATEWAY] probe failed: …` (saat boot)  | WebSocket ke `gateway.discord.gg` gagal padahal REST (`discord.com`) OK     | host menutup WebSocket keluar / IPv6 rusak: biarkan `GATEWAY_IPV4_FIRST=true`       |
+
+**`CONNECTION NOT STARTED` sekarang pulih otomatis.** Kalau eris-sharder gagal
+mengirim assignment-nya (penyebab laporan terakhir), master mengirim pesan `connect`
+yang sama sendiri, memverifikasinya lewat beacon worker, dan mengulang sampai worker
+benar-benar membuat Eris client:
+
+```
+[SHARD] plan: cluster 0 → worker 1, shards 0~0 (eris-sharder queue: 1 pending [0])
+[CLUSTER] sent the shard assignment for cluster 0 (shards 0~0) to worker 1 directly — eris-sharder did not deliver it (attempt 1)
+[GATEWAY] stage ipc_connect_received — cluster 0, shards 0~0 of 1
+[GATEWAY] stage connect_called — Client at 1653ms
+[GATEWAY] connecting with presence online — playing "OCEAN BOT" (attempt 1)
+```
+
+Arti `eris-sharder queue: N pending`: **1 pending** = library tidak pernah mengirim
+(itulah bug-nya, kini ditangani); **0 pending tapi tidak ada `ipc_connect_received`**
+= pesan keluar dari master tetapi tidak sampai ke worker (masalah IPC/container —
+laporkan log-nya). Bot tidak akan membuat dua koneksi gateway: worker menolak
+`connect()` kedua untuk rentang shard yang sama.
 
 `--doctor` sekarang juga membuka WebSocket ke gateway (tanpa IDENTIFY, jadi tidak
 memakai session) dan mencetak `[ok] gateway websocket — HELLO in 132ms`. Kalau baris
@@ -469,7 +488,7 @@ discord: application OCEAN (id …); MESSAGE CONTENT INTENT enabled
 shard config: shards 0~0 of 1 (Discord's recommendation)
 Creating shards 0~0 out of 1 total shards!
 [Cluster 0] Connecting with 1 shard(s)
-bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "o help")
+bot ready: Ocean#5352 in 1 guild(s), shard 0 - 0 — ONLINE (status online, playing "OCEAN BOT")
 Bot is online. Commands accept the prefix "o" (try "ohelp")
 ```
 
@@ -502,7 +521,7 @@ bergantung pada server sharder upstream. Semua lewat environment:
 ```ini
 BOT_STATUS=online          # online | idle | dnd | invisible
 BOT_ACTIVITY_TYPE=playing  # playing | watching | listening | competing | streaming | custom
-BOT_ACTIVITY_TEXT=o help   # placeholder: {guilds} {users} {shards} {prefix}
+BOT_ACTIVITY_TEXT=OCEAN BOT   # placeholder: {guilds} {users} {shards} {prefix}
 BOT_ACTIVITY_URL=          # wajib kalau type=streaming
 BOT_PRESENCE_REFRESH_SEC=0 # >0 = perbarui berkala (mis. 600)
 ```
@@ -511,10 +530,10 @@ Contoh:
 
 | Konfigurasi                                           | Tampilan di Discord      |
 | ----------------------------------------------------- | ------------------------ |
-| `BOT_ACTIVITY_TYPE=playing`, text `o help`            | **Playing** o help       |
+| `BOT_ACTIVITY_TYPE=playing`, text `OCEAN BOT`         | **Playing** o help       |
 | `BOT_ACTIVITY_TYPE=watching`, text `{guilds} servers` | **Watching** 1 servers   |
-| `BOT_ACTIVITY_TYPE=listening`, text `o help`          | **Listening to** o help  |
-| `BOT_ACTIVITY_TYPE=custom`, text `o help`             | **Custom Status** o help |
+| `BOT_ACTIVITY_TYPE=listening`, text `OCEAN BOT`       | **Listening to** o help  |
+| `BOT_ACTIVITY_TYPE=custom`, text `OCEAN BOT`          | **Custom Status** o help |
 | `BOT_ACTIVITY_TYPE=streaming` + `BOT_ACTIVITY_URL`    | **Live on Twitch** …     |
 
 Catatan:

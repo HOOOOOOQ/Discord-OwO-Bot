@@ -13,11 +13,11 @@ function fakeClient() {
 	};
 }
 
-test('defaults are online + playing "o help"', () => {
+test('defaults are online + playing "OCEAN BOT"', () => {
 	const resolved = presence.resolve({});
 	assert.strictEqual(resolved.status, 'online');
 	assert.strictEqual(resolved.type, 'playing');
-	assert.strictEqual(resolved.text, 'o help');
+	assert.strictEqual(resolved.text, 'OCEAN BOT');
 	assert.strictEqual(resolved.refreshMs, 0);
 	assert.deepStrictEqual(resolved.warnings, []);
 });

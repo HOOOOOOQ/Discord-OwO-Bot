@@ -1,5 +1,65 @@
 # FIXLOG
 
+## CONNECTION NOT STARTED — the master never delivered eris-sharder's shard assignment (fixed)
+
+Field report with the staged watchdog in place:
+
+```
+[BOOT] eris-sharder Master constructed in the worker
+[SHARD] plan: cluster 0 -> worker 1, shards 0~0
+[ERROR] [GATEWAY] CONNECTION NOT STARTED
+[ERROR] The shard assignment (IPC "connect" message) was never received from the master.
+```
+
+That isolates the failure to the master → worker hop: the master knew the shard
+range (it printed the plan) but the worker never got the message, so no Eris client
+was ever constructed and no socket was ever opened.
+
+Why the library can lose it (`node_modules/eris-sharder@1.10.0`):
+
+- `src/sharding/cluster.js:76-96` — a worker creates its Eris client **only** in
+  `process.on("message")` on `msg.name === "connect"`.
+- `src/sharding/clustermanager.js:139-171` — that message is produced by
+  `connectShards()` → `queue.queueItem()` → `queue.emit("execute")` →
+  `master.workers[cluster.workerID].send(item.value)`.
+- All of it runs inside an async `process.nextTick` in `launch()`, and eris-sharder
+  installs only `uncaughtException` on the master — so a `TypeError` on a missing
+  `workers[id]`, a closed channel, or a non-serialisable `clientOptions` value
+  becomes a **swallowed unhandled rejection**: the queue entry stays put, nothing
+  is retried, nothing is logged.
+
+Fix — the master now delivers the assignment itself, verifies it, and never sends a
+second copy:
+
+- **new `src/utils/shardAssignment.js`** rebuilds the exact same message from the
+  ClusterManager's public state (`id, clusterCount, name:"connect", firstShardID,
+lastShardID, maxShards, token, file, clientOptions`), delivers it over the cluster
+  channel, reports send failures with their real error/code, and drops
+  eris-sharder's stale queue entry once the worker acknowledges.
+- **`index.js` `superviseGateway()`** acknowledges via the worker's
+  `ipc_connect_received` stage beacon (now carrying `clusterId`), and retries at
+  1.5 s / 3 s / 6 s / 12 s / 14 s. A healthy library is never raced: nothing is
+  sent while a worker acknowledges, and if another cluster is already connected the
+  takeover waits 12 s (eris-sharder serialises clusters on purpose to respect
+  Discord's identify concurrency).
+- **`[SHARD] plan: … (eris-sharder queue: N pending [ids])`** — a pending entry means
+  eris-sharder's own send never happened (the outage), an empty queue with no ack
+  means the message left the master but never arrived.
+- **No duplicate gateway sessions**: `gatewayBoot` refuses a second `connect()` for
+  the same shard range in the same worker (`refused a second gateway connection`),
+  and the master removes eris-sharder's queued copy as soon as the worker acks.
+
+Verified by fault injection: with `master.workers[id].send()` disabled in the
+installed eris-sharder, the bot now logs
+`[CLUSTER] sent the shard assignment for cluster 0 … directly — eris-sharder did not
+deliver it (attempt 1)` 1.6 s after boot and the worker proceeds to
+`ipc_connect_received → connect_called → [GATEWAY] connecting …`. With the library
+restored, no direct send happens (1 and 2 clusters tested), so the workaround only
+engages when the library actually fails.
+
+Tests: `test/shardAssignment.test.js` (11, including the "queue never delivers"
+regression) — suite 183/183.
+
 ## Worker alive, gateway never starts — staged supervisor, IPv4-first DNS, IPC stage beacons
 
 Reported evidence: Node starts, `[DISCORD] authentication successful`, cluster manager
