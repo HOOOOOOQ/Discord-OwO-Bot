@@ -140,8 +140,14 @@ exports.resolveMysql = function (env = process.env) {
 		} catch (err) {
 			// Never log the value itself: it contains the password.
 			log.error(
-				`mysql: ${source.name} is invalid (${err.message}); falling back to MYSQL_HOST/MYSQL_USER/MYSQL_PASS/MYSQL_DATABASE`
+				`[DATABASE] ${source.name} is invalid (${err.message}); falling back to MYSQL_HOST/MYSQL_USER/MYSQL_PASS/MYSQL_DATABASE`
 			);
+			if (/mongodb/i.test(String(source.value).slice(0, 12))) {
+				log.error(
+					'[ACTION] that is a MongoDB URL — this bot uses MySQL/MariaDB. Replace ' +
+						'DATABASE_URL with mysql://USER:PASSWORD@HOST:3306/owo'
+				);
+			}
 		}
 	}
 	const port = Number.parseInt(env.MYSQL_PORT, 10);

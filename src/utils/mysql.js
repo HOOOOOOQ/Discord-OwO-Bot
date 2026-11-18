@@ -34,6 +34,23 @@ const config = {
 	idleTimeout: Number.parseInt(process.env.MYSQL_IDLE_TIMEOUT_MS, 10) || 60000,
 };
 
+if (!config.host) {
+	log.error('[DATABASE] no MySQL host configured — every database feature will fail');
+	log.error(
+		'[ACTION] set DATABASE_URL=mysql://user:pass@HOST:3306/owo (Pterodactyl → Startup/Variables). ' +
+			'Inside the container 127.0.0.1 is the bot itself, not the database host.'
+	);
+} else {
+	log.info(
+		`[DATABASE] connecting to ${config.host}:${config.port || 3306}/${config.database || '?'} as ${
+			config.user || '(no user)'
+		}`
+	);
+}
+log.info(
+	`[DATABASE] pool limit=${config.connectionLimit} connectTimeout=${config.connectTimeout}ms`
+);
+
 const pool = mysql.createPool(config);
 
 /*
@@ -42,7 +59,18 @@ const pool = mysql.createPool(config);
  * exception and kills the cluster, so it is handled here.
  */
 pool.on('error', (err) => {
-	log.error(`mysql pool error: ${err.code || err.name}: ${err.message}`);
+	log.error(`[DATABASE] pool error: ${err.code || err.name}: ${err.message}`);
+	if (err.code === 'ECONNREFUSED' || err.code === 'EHOSTUNREACH' || err.code === 'ENOTFOUND') {
+		log.error(
+			`[ACTION] ${config.host}:${config.port || 3306} is not reachable from this container — ` +
+				'use the database host/IP as seen from inside Pterodactyl (often 172.18.0.1 or a service name)'
+		);
+	}
+	if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+		log.error(
+			'[ACTION] MySQL rejected the credentials — check MYSQL_USER/MYSQL_PASS or DATABASE_URL'
+		);
+	}
 });
 pool.on('connection', () => {
 	log.debug('mysql: new connection established');

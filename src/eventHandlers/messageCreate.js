@@ -10,24 +10,34 @@ const errors = require('../utils/errors.js');
 /* eslint-disable-next-line */
 const blacklist = require('../utils/blacklist.js');
 const survey = require('../utils/survey.js');
+const trace = require('../utils/commandTrace.js');
 
 // Fired when a message is created
 exports.handle = async function (msg, raw) {
 	// if (blacklist.checkBot(msg)) return;
-	if (this.optOut[msg.author.id]) return;
-	if (this.pause) return;
-
-	//Ignore if bot
 	if (msg.author.bot) {
+		trace.rejected('author_is_bot', msg);
 		return;
-	} else if (
+	}
+
+	trace.received(msg);
+
+	if (this.optOut[msg.author.id]) {
+		trace.rejected('opted_out', msg);
+		return;
+	}
+	if (this.pause) {
+		trace.rejected('paused', msg);
+		return;
+	}
+
+	const whitelist = this.config.debugWhitelist || [];
+	if (this.debug && msg.channel.guild && !whitelist.includes(msg.channel.guild.id)) {
 		/* Ignore guilds if in debug mode */
-		this.debug &&
-		msg.channel.guild &&
-		!(this.config.debugWhitelist || []).includes(msg.channel.guild.id)
-	) {
+		trace.rejected('debug_whitelist', msg, { whitelist: whitelist.join(',') || 'none' });
 		return;
-	} else if (await this.command.executeAdmin(msg, raw)) {
+	}
+	if (await this.command.executeAdmin(msg, raw)) {
 		return;
 
 		// no guild, its a dm

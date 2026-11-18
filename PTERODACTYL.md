@@ -78,11 +78,13 @@ dan user `container`) + `cairo pango jpeg giflib librsvg pixman` (runtime),
 - Startup command (sudah dari egg): `node index.js`.
 - Tab **Startup/Variables**:
 
-| Variable    | Nilai         | Catatan                                                               |
-| ----------- | ------------- | --------------------------------------------------------------------- |
-| `CLUSTERS`  | `2`           | **Jangan** biarkan 60 (default repo) di panel kecil → OOM. 1–2 cukup. |
-| `PREFIX`    | `o`           | Prefix default. Bisa diubah per server: `o prefix <baru>`.            |
-| `OWNER_IDS` | id Discord-mu | Kosong = tidak ada owner, `eval` dan command owner lain mati.         |
+| Variable        | Nilai         | Catatan                                                                                |
+| --------------- | ------------- | -------------------------------------------------------------------------------------- |
+| `CLUSTERS`      | `2`           | **Jangan** biarkan 60 (default repo) di panel kecil → OOM. 1–2 cukup.                  |
+| `PREFIX`        | `o`           | Prefix default. Bisa diubah per server: `o prefix <baru>`.                             |
+| `OWNER_IDS`     | id Discord-mu | Kosong = tidak ada owner, `eval` dan command owner lain mati.                          |
+| `DEBUG`         | `false`       | Kalau `true`, bot **hanya** menjawab guild di `DEBUG_WHITELIST`.                       |
+| `COMMAND_DEBUG` | `false`       | `true` = cetak alur setiap pesan (`[CMD] …`) untuk mencari command yang tidak dijawab. |
 
 Variable panel dikirim sebagai environment variable dan **menang** atas isi
 `.env` (dotenv tidak menimpa env yang sudah ada).
@@ -246,25 +248,26 @@ instalasi pertama, dan tidak ada migrasi yang menghapus data.
 
 ## 9. Troubleshooting
 
-| Gejala                                                    | Penyebab & solusi                                                                                                                                                                                                              |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Install gagal: `cairo.h: No such file` / `node-gyp` error | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.                                                                            |
-| Start tapi crash `Cannot find module 'canvas'`            | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama.                                                                    |
-| `ECONNREFUSED 127.0.0.1:3306` / Redis                     | `MYSQL_HOST`/`REDIS_HOST` masih `localhost`. Pakai `172.18.0.1` atau IP host; cek `bind-address`/`bind` dan firewall.                                                                                                          |
-| Server mati sendiri, log `heap out of memory`             | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                                                                                        |
-| Panel tetap "Starting" walau bot online                   | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                                                                                      |
-| Command memegen error `Could not grab drake.jpg`          | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                                                                                           |
-| Install berhenti di `verify:commands`                     | Registry command gagal dimuat (file kurang / `node_modules` korup). Cek log install, upload ulang file yang kurang, lalu Reinstall lagi.                                                                                       |
-| `mysql: DATABASE_URL is invalid` di log                   | Format URL salah (skema bukan `mysql://`/`mariadb://`, atau password belum di-encode). Bot otomatis jatuh ke `MYSQL_*`; perbaiki URL atau isi variabel manual.                                                                 |
-| `node-pre-gyp ... 404 ... canvas-v2.11.2-node-v141`       | Node di image terlalu baru (mis. v25): canvas 2.11.2 tidak punya prebuilt untuk ABI itu. Sejak perbaikan ini `canvas` **opsional**, jadi install tetap sukses dan bot tetap jalan (memegen mati).                              |
-| `pkg-config: not found` / `binding.gyp` gagal             | Image tidak punya cairo/pango/pkg-config untuk mengompilasi canvas. Bot tetap jalan tanpa memegen; pakai image `pterodactyl/Dockerfile` kalau butuh memegen.                                                                   |
-| `git dep preparation failed`                              | Dulu disebabkan `merge-images` (git dep) yang punya devDependency `canvas`; dependensi itu sudah dihapus dari repo. Kalau masih muncul, periksa akses git/HTTPS node ke GitHub.                                                |
-| `Cannot find module 'dotenv'` saat start                  | `npm install` belum selesai (exit 1), jadi `node_modules` tidak lengkap. Perbaiki penyebab install gagal, lalu Reinstall.                                                                                                      |
-| `[CLUSTER] worker N exited …` berulang (crash loop)       | Cluster mati tepat setelah READY. Cek baris `[ERROR]` di atasnya; penyebab umum: `secret/macro.js`, `badwords.json`, atau `goodwords.json` hilang. Jalankan `node index.js --doctor` (sekarang memeriksa file wajib tersebut). |
-| `[ERROR] [GATEWAY] no READY after 45s`                    | Identify tidak pernah selesai: token salah (4004), privileged intent belum ON (4014), atau `wss://gateway.discord.gg` diblokir. Buktikan dengan `node index.js --doctor --connect`.                                            |
-| Command memegen jawab "needs the optional canvas module"  | Normal di host tanpa cairo/pango. Aktifkan dengan image custom (lihat bagian canvas opsional).                                                                                                                                 |
-| Prefix tidak berubah                                      | Variabel panel `PREFIX` menang atas `.env`; ubah di tab Startup atau hapus variabelnya.                                                                                                                                        |
-| `EACCES` saat menulis `secret/`                           | File ter-upload sebagai owner yang salah; lewat File Manager/SFTP panel (user `container`).                                                                                                                                    |
+| Gejala                                                               | Penyebab & solusi                                                                                                                                                                                                              |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Install gagal: `cairo.h: No such file` / `node-gyp` error            | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.                                                                            |
+| Start tapi crash `Cannot find module 'canvas'`                       | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama.                                                                    |
+| `ECONNREFUSED 127.0.0.1:3306` / Redis                                | `MYSQL_HOST`/`REDIS_HOST` masih `localhost`. Pakai `172.18.0.1` atau IP host; cek `bind-address`/`bind` dan firewall.                                                                                                          |
+| Server mati sendiri, log `heap out of memory`                        | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                                                                                        |
+| Panel tetap "Starting" walau bot online                              | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                                                                                      |
+| Command memegen error `Could not grab drake.jpg`                     | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                                                                                           |
+| Install berhenti di `verify:commands`                                | Registry command gagal dimuat (file kurang / `node_modules` korup). Cek log install, upload ulang file yang kurang, lalu Reinstall lagi.                                                                                       |
+| Bot online 1–2 detik lalu restart terus (`worker died … after fork`) | Kesalahan database saat modul command di-require. Sejak perbaikan ini tidak lagi mematikan cluster: cari `[DATABASE] could not read pet_team.pgid` + baris `[ACTION]`, lalu perbaiki `DATABASE_URL`.                           |
+| `mysql: DATABASE_URL is invalid` di log                              | Format URL salah (skema bukan `mysql://`/`mariadb://`, atau password belum di-encode). Bot otomatis jatuh ke `MYSQL_*`; perbaiki URL atau isi variabel manual.                                                                 |
+| `node-pre-gyp ... 404 ... canvas-v2.11.2-node-v141`                  | Node di image terlalu baru (mis. v25): canvas 2.11.2 tidak punya prebuilt untuk ABI itu. Sejak perbaikan ini `canvas` **opsional**, jadi install tetap sukses dan bot tetap jalan (memegen mati).                              |
+| `pkg-config: not found` / `binding.gyp` gagal                        | Image tidak punya cairo/pango/pkg-config untuk mengompilasi canvas. Bot tetap jalan tanpa memegen; pakai image `pterodactyl/Dockerfile` kalau butuh memegen.                                                                   |
+| `git dep preparation failed`                                         | Dulu disebabkan `merge-images` (git dep) yang punya devDependency `canvas`; dependensi itu sudah dihapus dari repo. Kalau masih muncul, periksa akses git/HTTPS node ke GitHub.                                                |
+| `Cannot find module 'dotenv'` saat start                             | `npm install` belum selesai (exit 1), jadi `node_modules` tidak lengkap. Perbaiki penyebab install gagal, lalu Reinstall.                                                                                                      |
+| `[CLUSTER] worker N exited …` berulang (crash loop)                  | Cluster mati tepat setelah READY. Cek baris `[ERROR]` di atasnya; penyebab umum: `secret/macro.js`, `badwords.json`, atau `goodwords.json` hilang. Jalankan `node index.js --doctor` (sekarang memeriksa file wajib tersebut). |
+| `[ERROR] [GATEWAY] no READY after 45s`                               | Identify tidak pernah selesai: token salah (4004), privileged intent belum ON (4014), atau `wss://gateway.discord.gg` diblokir. Buktikan dengan `node index.js --doctor --connect`.                                            |
+| Command memegen jawab "needs the optional canvas module"             | Normal di host tanpa cairo/pango. Aktifkan dengan image custom (lihat bagian canvas opsional).                                                                                                                                 |
+| Prefix tidak berubah                                                 | Variabel panel `PREFIX` menang atas `.env`; ubah di tab Startup atau hapus variabelnya.                                                                                                                                        |
+| `EACCES` saat menulis `secret/`                                      | File ter-upload sebagai owner yang salah; lewat File Manager/SFTP panel (user `container`).                                                                                                                                    |
 
 ---
 
@@ -369,6 +372,37 @@ bot ready: DEBUG mode is on — only DEBUG_WHITELIST guilds are answered
 
 Isi `DEBUG_WHITELIST` dengan **ID guild** (Developer Mode → klik kanan server →
 Copy Server ID), atau hapus `DEBUG` setelah sharding normal.
+
+Kalau `DEBUG=true` tetapi `DEBUG_WHITELIST` kosong, **tidak ada** guild yang
+dijawab sama sekali — sejak versi ini bot menulis peringatan itu saat boot:
+
+```
+WARN  config: DEBUG is on but DEBUG_WHITELIST is empty, so NO guild message will be answered
+```
+
+Untuk melihat pesan berhenti di langkah mana, nyalakan `COMMAND_DEBUG=true`
+(otomatis aktif saat `DEBUG=true`). Setiap pesan menghasilkan satu baris:
+
+```
+INFO  [CMD] message_received — at=guild=123 channel=456 author=789 chars=5 content=ohelp
+INFO  [CMD] prefix_matched  — at=… prefix=o source=default command=help
+INFO  [CMD] command_parsed  — at=… command=help registered=true alias=help
+INFO  [CMD] command_executed — at=… command=help phase=start
+INFO  [CMD] command_executed — at=… command=help phase=done
+INFO  [CMD] rejected — reason=prefix_not_matched at=… expected=o
+```
+
+- tidak ada `message_received` → pesan tidak sampai ke bot (Message Content
+  Intent di Developer Portal, atau `DEBUG_WHITELIST`);
+- `rejected reason=debug_whitelist` → guild ini tidak ada di `DEBUG_WHITELIST`;
+- `rejected reason=prefix_not_matched` → prefix salah (`thelp` saat `PREFIX=o`);
+- `rejected reason=unknown_command` → command tidak terdaftar;
+- `rejected reason=rules_not_accepted` → user belum `o accept`;
+- `phase=start` tanpa `phase=done` → command jalan tetapi tidak selesai
+  (biasanya database: lihat baris `[DATABASE]` dan `[ACTION]`).
+
+Isi pesan dipotong 80 karakter dan semua baris tetap melewati redaksi
+`src/utils/log.js`, jadi token/password tidak pernah tercetak.
 
 **4. Belum di-invite.** `bot ready: ... in 0 guild(s)` berarti bot tidak berada
 di server mana pun; invite lewat
