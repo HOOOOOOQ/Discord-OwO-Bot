@@ -1,5 +1,83 @@
 # FIXLOG
 
+## "ONLINE but `ohelp` / `o help` never answers" — a database error killed the cluster 2 s after READY (fixed)
+
+Field report: `[STATE] BOT_ONLINE`, `[STATE] PRESENCE_SYNCHRONIZED`,
+`MESSAGE CONTENT INTENT enabled`, `prefix=o debug=true clusters=1`, and yet
+`ohelp`, `o help`, `thelp` and `tdaily` produced no reply.
+
+What the console showed, read bottom-up:
+
+```
+[01:59:14] Cluster 0 | Shard 0 is ready!
+[01:59:14] ERROR [cluster:0] [FATAL] uncaughtException: AggregateError
+    at internalConnectMultiple (node:net:1122:18)
+    at Pool.query (/home/container/node_modules/mysql/lib/Pool.js:48:16)
+    at Object.<anonymous> (/home/container/src/commands/commandList/battle/util/battleUtil.js:23:11)
+[01:59:14] ERROR [cluster:0] [FATAL] crash happened 1913ms AFTER gateway READY
+[01:59:14] ERROR [master] worker 1 died 4599ms after fork — eris-sharder restarts it
+```
+
+So the bot _was_ online — for about two seconds. `battleUtil.js` ran
+`mysql.con.query(...)` **while the command modules were being required**, i.e.
+milliseconds after READY, and its callback did `throw err`. MySQL was
+unreachable (`DATABASE_URL` pointed at a `mongodb+srv://` URL, which
+`src/utils/dbUrl.js` rejects, and the fallback host was `127.0.0.1`, which inside
+the container is the bot itself), so the throw became an `uncaughtException`,
+eris-sharder re-forked the cluster, and the next fork crashed the same way. The
+gateway stayed "ready" long enough to print the banner and never long enough to
+answer a message.
+
+Fixes:
+
+- **`src/commands/commandList/battle/util/battleUtil.js`** — the three
+  require-time queries and the refresh timer no longer throw. A failure is
+  reported once (`[DATABASE] could not read pet_team.pgid …`) with an `[ACTION]`
+  line, the ids stay at `0`, and the bot keeps running. The refresh timer is
+  `unref()`d.
+- **`src/commands/commandList/ranking/me.js`** — the last `if (err) throw err`
+  at module scope: logged, and the caller gets a normal "try again" answer
+  instead of a dead cluster. `grep -rn "if (err) throw err" src/` is now empty of
+  require-time throws.
+- **`src/utils/mysql.js`** — logs `[DATABASE] connecting to <host>:<port>/<db> as
+<user>` (never the password), fails with a readable message when no host is
+  configured, and turns `ECONNREFUSED` / `EHOSTUNREACH` / `ENOTFOUND` /
+  `ER_ACCESS_DENIED_ERROR` pool errors into an `[ACTION]` line that names the
+  wrong setting.
+- **`src/utils/dbUrl.js`** — a `mongodb+srv://` value now says so explicitly:
+  `DATABASE_URL uses a MongoDB URL … set mysql://USER:PASS@HOST:3306/owo`.
+
+Diagnostics for the "which step dropped my message?" question
+(`COMMAND_DEBUG=true`, or automatically when `DEBUG=true`; off otherwise):
+
+```
+[CMD] message_received — at=guild=… channel=… author=… chars=5 content=ohelp
+[CMD] prefix_matched  — at=… prefix=o source=default command=help
+[CMD] command_parsed  — at=… command=help registered=true alias=help
+[CMD] command_executed — at=… command=help phase=start
+[CMD] command_executed — at=… command=help phase=done
+[CMD] rejected — reason=prefix_not_matched at=… expected=o
+```
+
+`reason=` is one of `author_is_bot`, `opted_out`, `paused`, `debug_whitelist`,
+`prefix_not_matched`, `unknown_command`, `rules_not_accepted`, `banned`,
+`cooldown`. Message bodies are truncated to 80 characters, and every line still
+goes through `src/utils/log.js`, so tokens and passwords are redacted.
+
+Prefix handling was moved into **`src/utils/prefix.js`** (same behaviour, now
+testable without loading the whole command tree, which queries the database at
+require time): `ohelp` and `o help` both parse, other prefixes are ignored, and a
+Redis outage during a guild-prefix lookup falls back to the default prefix
+instead of dropping the message.
+
+`src/utils/config.js` now prints the effective prefix at boot and warns when
+`DEBUG=true` with an empty `DEBUG_WHITELIST` (in that state **no** guild message
+is answered — the second half of the same field report).
+
+Tests: `test/prefix.test.js` (12 cases, including `ohelp` vs `o help` vs `thelp`
+and the Redis failure) and `test/commandTrace.test.js` (flag precedence,
+truncation, never throwing).
+
 ## CONNECTION NOT STARTED — the master never delivered eris-sharder's shard assignment (fixed)
 
 Field report with the staged watchdog in place:

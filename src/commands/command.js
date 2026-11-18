@@ -13,6 +13,9 @@ const auth = require('../utils/auth.js');
 const errors = require('../utils/errors.js');
 const log = require('../utils/log.js');
 
+const trace = require('../utils/commandTrace.js');
+const { checkPrefix } = require('../utils/prefix.js');
+
 const commands = {};
 const adminCommands = {};
 
@@ -41,10 +44,15 @@ class Command {
 
 	async dispatch(msg, raw) {
 		// Parse content info
-		let { args, context } = (await checkPrefix(this.main, msg)) || {};
+		let { args, context, prefix: usedPrefix, source } = (await checkPrefix(this.main, msg)) || {};
 		const containsPoints =
 			msg.content.toLowerCase().includes('owo') || msg.content.toLowerCase().includes('uwu');
 		if (!args) {
+			// The message did not start with the default or the guild prefix
+			trace.rejected('prefix_not_matched', msg, {
+				expected: this.main.prefix,
+				guild_prefix: msg.channel?.guild?.prefix || 'unset',
+			});
 			//if user said owo/uwu
 			if (containsPoints) {
 				executeCommand(this.main, initParam(msg, 'points', [], this.main));
@@ -54,17 +62,21 @@ class Command {
 
 		//Get command name
 		let command = args.shift().toLowerCase();
+		trace.matched(msg, usedPrefix, source, command);
 
 		//  Check if that command exists
 		if (!commands[command]) {
+			trace.parsed(msg, command, false);
 			if (containsPoints) {
 				executeCommand(this.main, initParam(msg, 'points', [], this.main));
 			}
 			return;
 		}
+		trace.parsed(msg, command, true, commands[command].alias?.[0]);
 
 		// Make sure user accepts rules first
 		if (!(await acceptedRules(this.main, msg))) {
+			trace.rejected('rules_not_accepted', msg, { command });
 			executeCommand(this.main, initParam(msg, 'rule', [], this.main));
 			return;
 		}
@@ -163,14 +175,22 @@ async function executeCommand(main, p) {
 
 	try {
 		// Check if the command/user/channel is banned
-		if (!(await ban.check(p, p.commandAlias))) return;
+		if (!(await ban.check(p, p.commandAlias))) {
+			trace.rejected('banned', p.msg, { command: commandName });
+			return;
+		}
 
 		// Check for cooldowns
-		if (!(await cooldown.check(p, p.commandAlias))) return;
+		if (!(await cooldown.check(p, p.commandAlias))) {
+			trace.rejected('cooldown', p.msg, { command: commandName });
+			return;
+		}
 
 		// Execute command. A thrown command is logged and answered once, never
 		// propagated to the event loop where it would kill the cluster.
+		trace.executed(p.msg, commandName, { phase: 'start' });
 		await errors.runCommandSafely(p, () => commands[p.command].execute(p));
+		trace.executed(p.msg, commandName, { phase: 'done' });
 
 		// Log stats to statsd
 		logger.command(commandName, p.msg);
@@ -400,35 +420,6 @@ function initParam(msg, command, args, main, context) {
 		return param.flags;
 	};
 	return param;
-}
-
-async function checkPrefix(main, msg) {
-	const content = msg.content.toLowerCase();
-	if (content.startsWith(main.prefix)) {
-		let args = msg.content.slice(main.prefix.length).trim().split(/ +/g);
-		let context = getContext(args, main.prefix, msg.content);
-		return { args, context };
-	}
-
-	if (!msg.channel.guild) return {};
-
-	// If prefix isn't saved, fetch it
-	if (msg.channel.guild.prefix === undefined) {
-		let prefix = await main.redis.hget(msg.channel.guild.id, 'prefix');
-		if (prefix) msg.channel.guild.prefix = prefix;
-		else msg.channel.guild.prefix = false;
-	}
-
-	// check with custom prefix
-	if (msg.channel.guild.prefix && content.startsWith(msg.channel.guild.prefix)) {
-		let args = msg.content.slice(msg.channel.guild.prefix.length).trim().split(/ +/g);
-		let context = getContext(args, msg.channel.guild.prefix, msg.content);
-		return { args, context };
-	}
-}
-
-function getContext(args, prefix, content) {
-	return content.trim().replace(prefix, '').trim().replace(/^\S+/i, '').trim();
 }
 
 async function acceptedRules(main, msg) {

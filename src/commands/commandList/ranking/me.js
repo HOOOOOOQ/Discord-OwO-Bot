@@ -6,6 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const log = require('../../../utils/log.js');
 
 const global = require('../../../utils/global.js');
 const animalUtil = require('../battle/util/animalUtil.js');
@@ -605,7 +606,17 @@ function getGuildRanking(con, msg, id, p) {
 
 	//Sql query
 	con.query(sql, async function (err, rows, _fields) {
-		if (err) throw err;
+		if (err) {
+			// A failed query must not become an uncaughtException that kills the
+			// cluster (it used to do exactly that while the bot was already online).
+			log.error(`[DATABASE] ranking me query failed: ${err.code || err.message}`);
+			try {
+				await p.send('Database error — try again in a moment.');
+			} catch (sendErr) {
+				/* channel gone */
+			}
+			return;
+		}
 		let above = rows[0];
 		let below = rows[1];
 		let me = rows[2][0];

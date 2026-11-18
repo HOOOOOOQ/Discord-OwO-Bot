@@ -198,10 +198,24 @@ config.validate = function () {
 	if ((config.cowoncyAdmins || []).length === 0 && (config.cowoncyAdminRoles || []).length === 0) {
 		log.info('config: no COWONCY_ADMIN_IDS/COWONCY_ADMIN_ROLE_IDS set; `grant` is owner-only');
 	}
+	if (/\s/.test(config.prefix)) {
+		log.warn(
+			`config: PREFIX="${config.prefix}" contains whitespace; use a single token such as "o"`
+		);
+	}
+	log.info(
+		`config: prefix="${config.prefix}" — "ohelp" and "o help" both parse, other prefixes are ignored`
+	);
 	if (config.debug) {
 		log.info(
 			`config: DEBUG mode is on; the bot only responds in ${config.debugWhitelist.length} whitelisted guild(s)`
 		);
+		if (config.debugWhitelist.length === 0) {
+			log.warn(
+				'config: DEBUG is on but DEBUG_WHITELIST is empty, so NO guild message will be answered ' +
+					'(set DEBUG=false, or DEBUG_WHITELIST=<guild id>)'
+			);
+		}
 	}
 	if (SNOWFLAKE_LIST.test(String(config.owner || ''))) return true;
 	return config.owners.length > 0;

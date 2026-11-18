@@ -6,6 +6,7 @@
  */
 
 const mysql = require('../../../../utils/mysql.js');
+const log = require('../../../../utils/log.js');
 const WeaponInterface = require('../WeaponInterface.js');
 
 const maxAnimals = 6;
@@ -20,20 +21,46 @@ const stopStreak = {
 
 let minPgid = 0;
 let maxPgid = 0;
+let pgidWarned = false;
+
+/*
+ * These run while the command modules are being required, i.e. milliseconds after
+ * the gateway READY. They used to `throw err` inside the callback, so an
+ * unreachable MySQL server turned into an uncaughtException that killed the
+ * cluster about two seconds after it came online ("online for a second, then
+ * offline", commands never answered). A database problem must never take the
+ * gateway down: log it once, keep the counters at 0 and let the rest of the bot
+ * run (commands that need the DB will report the real error when they run).
+ */
+function reportPgidError(err) {
+	if (pgidWarned) return;
+	pgidWarned = true;
+	log.error(
+		`[DATABASE] could not read pet_team.pgid (${
+			err.code || err.message
+		}) — battle team ids stay at 0`
+	);
+	log.error(
+		'[ACTION] check DATABASE_URL (mysql://user:pass@host:3306/owo) or MYSQL_HOST/MYSQL_USER/MYSQL_PASS; ' +
+			'the host must be reachable from inside the container (not 127.0.0.1)'
+	);
+}
+
 mysql.con.query('SELECT pgid FROM pet_team ORDER BY pgid ASC LIMIT 1', (err, result) => {
-	if (err) throw err;
+	if (err) return reportPgidError(err);
 	minPgid = result[0]?.pgid || 0;
 });
 mysql.con.query('SELECT pgid FROM pet_team ORDER BY pgid DESC LIMIT 1', (err, result) => {
-	if (err) throw err;
+	if (err) return reportPgidError(err);
 	maxPgid = result[0]?.pgid || 0;
 });
-setInterval(() => {
+const pgidTimer = setInterval(() => {
 	mysql.con.query('SELECT pgid FROM pet_team ORDER BY pgid DESC LIMIT 1', (err, result) => {
-		if (err) throw err;
+		if (err) return reportPgidError(err);
 		maxPgid = result[0]?.pgid || 0;
 	});
 }, 60 * 1000);
+if (typeof pgidTimer.unref === 'function') pgidTimer.unref();
 
 exports.getRandomPgid = async function () {
 	const rand = minPgid + Math.floor(Math.random() * (maxPgid - minPgid));
