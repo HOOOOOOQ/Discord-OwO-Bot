@@ -9,9 +9,9 @@ test('IDENTIFY presence is "online" instead of eris\' default "offline"', () => 
 	assert.strictEqual(presence.status, 'online');
 	assert.strictEqual(presence.afk, false);
 	assert.strictEqual(presence.since, 0);
-	assert.strictEqual(resolved.type, 'playing');
-	assert.deepStrictEqual(activity, { name: 'OCEAN BOT', type: 0 });
-	assert.deepStrictEqual(presence.activities, [{ name: 'OCEAN BOT', type: 0 }]);
+	assert.strictEqual(resolved.type, 'watching');
+	assert.deepStrictEqual(activity, { name: 'discord.gg/666family', type: 3 });
+	assert.deepStrictEqual(presence.activities, [{ name: 'discord.gg/666family', type: 3 }]);
 });
 
 test('IDENTIFY presence honours the configured status/activity', () => {
@@ -26,7 +26,7 @@ test('IDENTIFY presence honours the configured status/activity', () => {
 
 test('a missing activity still sends a valid presence object', () => {
 	const { presence } = gatewayBoot.identifyPresence({ BOT_ACTIVITY_TEXT: '   ' });
-	assert.deepStrictEqual(presence.activities, [{ name: 'OCEAN BOT', type: 0 }]);
+	assert.deepStrictEqual(presence.activities, [{ name: 'discord.gg/666family', type: 3 }]);
 });
 
 test('install() sets the presence before the real connect runs and is idempotent', () => {

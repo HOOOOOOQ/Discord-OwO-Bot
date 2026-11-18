@@ -5,8 +5,8 @@ const doctor = require('../src/utils/doctor.js');
 
 const HEALTHY_ENV = {
 	BOT_TOKEN: 'Bot abcdefghijklmnop.qrstu',
-	DATABASE_URL: 'mysql://owo:secret@127.0.0.1:3306/owo',
-	REDIS_URL: 'redis://:secret@127.0.0.1:6379/0',
+	// MongoDB Atlas is the only datastore the bot needs now
+	MONGODB_URI: 'mongodb+srv://ocean:secret@cluster0.example.mongodb.net/ocean',
 	CLUSTERS: '2',
 };
 
@@ -84,12 +84,24 @@ test('DEBUG without a whitelist would ignore every guild', async () => {
 	assert.ok(failures(checks).some((check) => /DEBUG_WHITELIST/.test(check.title)));
 });
 
-test('missing storage configuration fails', async () => {
-	const checks = await collect({ DATABASE_URL: '', REDIS_URL: '' });
+test('missing MongoDB configuration fails with an actionable message', async () => {
+	const checks = await collect({ MONGODB_URI: '' });
 	const fail = failures(checks);
-	assert.strictEqual(fail.length, 2);
-	assert.ok(fail.some((check) => /database/.test(check.title)));
-	assert.ok(fail.some((check) => /redis/.test(check.title)));
+	assert.strictEqual(fail.length, 1);
+	assert.match(fail[0].title, /database/);
+	assert.match(fail[0].detail, /MONGODB_URI/);
+});
+
+test('a SQL URL is rejected instead of silently ignored', async () => {
+	const checks = await collect({ MONGODB_URI: 'mysql://u:p@h:3306/owo' });
+	const fail = failures(checks);
+	assert.ok(fail.some((check) => /database/.test(check.title) && /MongoDB/.test(check.detail)));
+});
+
+test('legacy MySQL/Redis variables are reported and ignored', async () => {
+	const checks = await collect({ DATABASE_URL: 'mysql://u:p@h/db', REDIS_URL: 'redis://h' });
+	assert.deepStrictEqual(failures(checks), []);
+	assert.ok(checks.some((check) => /legacy variables/.test(check.title)));
 });
 
 test('an unreachable database is a warning, not a failure', async () => {

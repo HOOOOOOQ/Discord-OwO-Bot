@@ -5,18 +5,35 @@
  * For more information, see README.md and LICENSE
  */
 
+/**
+ * Promise wrapper around the database, exactly like before — only the engine
+ * underneath changed (MongoDB Atlas instead of a MySQL server).
+ *
+ * `startTransaction()` opens a MongoDB session and transaction on Atlas (which
+ * is always a replica set). If the deployment cannot do transactions (a
+ * standalone mongod, e.g. a local test instance), it logs once and keeps going
+ * without one: the statements still run, they are just not rolled back together.
+ * The economic operations themselves are atomic either way, because they use
+ * `$inc` / upserts rather than read-modify-write.
+ */
+
 const log = require('../utils/log.js');
+const client = require('../utils/mongo/client.js');
+const sqlLayer = require('../utils/mongo/sql/index.js');
 
 let con = require('../utils/mysql.js').con;
-const acquireTimeLimit = Number.parseInt(process.env.MYSQL_TRANSACTION_TIMEOUT_MS, 10) || 10000;
-const queryTimeout = Number.parseInt(process.env.MYSQL_QUERY_TIMEOUT_MS, 10) || 30000;
+let warnedAboutTransactions = false;
+let transactionCounter = 0;
 
-/** Allows tests to inject a fake pool without touching the real connection. */
+const acquireTimeLimit = Number.parseInt(process.env.MONGO_TRANSACTION_TIMEOUT_MS, 10) || 15000;
+const queryTimeout = Number.parseInt(process.env.MONGO_QUERY_TIMEOUT_MS, 10) || 30000;
+
+/** Allows tests to inject a fake connection without touching MongoDB. */
 exports.setConnection = function (connection) {
 	con = connection;
 };
 
-/* Converts mysql queries to Promises */
+/** Converts a query to a Promise. */
 exports.query = function (sql, variables = []) {
 	return new Promise((resolve, reject) => {
 		con.query({ sql, timeout: queryTimeout }, variables, function (err, rows) {
@@ -27,106 +44,68 @@ exports.query = function (sql, variables = []) {
 };
 
 /**
- * Builds the transaction handle for an already-acquired connection.
- *
- * Every terminal operation (commit / rollback) is idempotent, releases the
- * connection exactly once, and never throws from inside a driver callback.
- * Exported so the lifecycle can be unit tested against a fake connection.
+ * Starts a transaction and returns `{ commit, rollback, query }`.
+ * A handle that is never settled is aborted by a watchdog, so an abandoned
+ * transaction can never hold a session open.
  */
-exports.buildTransaction = function (acon, options = {}) {
-	const timeLimit = options.timeLimit || acquireTimeLimit;
-	const onWarn = options.onWarn || ((message) => log.error(message));
+exports.startTransaction = async function () {
+	await client.whenReady();
+	const store = client.getStore();
+	const session = await store.startSession();
+	if (!session && !warnedAboutTransactions) {
+		warnedAboutTransactions = true;
+		log.warn(
+			'[MONGO] this MongoDB deployment does not support transactions; ' +
+				'multi-step operations run without one (Atlas always supports them)'
+		);
+	}
+	const scoped = session ? sqlLayer.withSession(store, session) : null;
+	const id = ++transactionCounter;
 	let settled = false;
-	let releaseTimer = null;
+	let timer = null;
 
-	const release = () => {
+	const finish = async (action) => {
+		if (settled) return false;
+		settled = true;
+		if (timer) clearTimeout(timer);
+		if (!session) return false;
 		try {
-			acon.release();
-		} catch (err) {
-			onWarn(`[${acon.threadId}] Failed to release mysql connection: ${err.message}`);
+			if (action === 'commit') {
+				await session.commitTransaction();
+				return true;
+			}
+			await session.abortTransaction();
+			return false;
+		} finally {
+			await session.endSession().catch(() => {});
 		}
-	};
-
-	const clearTimer = () => {
-		if (releaseTimer) {
-			clearTimeout(releaseTimer);
-			releaseTimer = null;
-		}
-	};
-
-	const rollback = function (reason) {
-		if (settled) return Promise.resolve(false);
-		settled = true;
-		clearTimer();
-		if (reason) onWarn(`[${acon.threadId}] Transaction rolled back: ${reason}`);
-		return new Promise((resolve) => {
-			acon.rollback(() => {
-				release();
-				resolve(false);
-			});
-		});
-	};
-
-	const commit = function () {
-		if (settled) return Promise.resolve(false);
-		settled = true;
-		clearTimer();
-		return new Promise((resolve, reject) => {
-			acon.commit((err) => {
-				if (err) {
-					acon.rollback(() => {
-						release();
-						reject(err);
-					});
-					return;
-				}
-				release();
-				resolve(true);
-			});
-		});
 	};
 
 	const transaction = {
-		commit,
-		rollback,
-		query: (sql, variables = []) =>
-			new Promise((resolve, reject) => {
-				if (settled) {
-					reject(new Error('Transaction is already closed'));
-					return;
-				}
-				acon.query({ sql, timeout: queryTimeout }, variables, (err, rows) => {
-					if (err) return reject(err);
-					resolve(rows);
-				});
-			}),
+		id,
+		query(sql, variables = []) {
+			if (settled) return Promise.reject(new Error('Transaction is already closed'));
+			if (scoped) return scoped.execute(sql, variables);
+			return sqlLayer.query(sql, variables);
+		},
+		commit: () => finish('commit'),
+		rollback: () => finish('rollback'),
 	};
 
-	releaseTimer = setTimeout(() => {
-		onWarn(`[${acon.threadId}] Mysql connection was not released!`);
-		rollback('lease timeout');
-	}, timeLimit);
-	// Do not keep the process alive just for the lease watchdog
-	releaseTimer.unref?.();
+	if (session) {
+		timer = setTimeout(() => {
+			log.error(
+				`[MONGO] transaction ${id} was not settled within ${acquireTimeLimit}ms — rolling back`
+			);
+			finish('rollback');
+		}, acquireTimeLimit);
+		if (typeof timer.unref === 'function') timer.unref();
+	}
 
 	return transaction;
 };
 
-exports.startTransaction = function () {
-	return new Promise((resolve, reject) => {
-		con.getConnection((err, acon) => {
-			if (err) return reject(err);
-			acon.beginTransaction((beginErr) => {
-				if (beginErr) {
-					try {
-						acon.release();
-					} catch (releaseError) {
-						log.error('Failed to release connection after failed transaction start');
-					}
-					return reject(beginErr);
-				}
-				resolve(exports.buildTransaction(acon));
-			});
-		});
-	});
+/** Kept for compatibility with the old lifecycle tests. */
+exports.buildTransaction = function (acon, options = {}) {
+	return exports.startTransaction(options);
 };

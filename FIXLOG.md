@@ -1,5 +1,77 @@
 # FIXLOG
 
+## MongoDB-only migration — MySQL, MariaDB and Redis removed from the runtime
+
+The bot used to need three moving parts: a Discord token, MariaDB/MySQL and
+Redis. Anything that was not reachable printed `ECONNREFUSED`, `Redis connection
+lost`, `no MySQL host configured` or `AggregateError`, and the cluster crashed a
+couple of seconds after READY (previous entry). This repair removes both
+services instead of documenting them better.
+
+### What changed
+
+| Layer | Before | After |
+| --- | --- | --- |
+| Relational store | `mysql` driver against 87 tables | `src/utils/mongo/sql/*` parses the existing SQL text and executes it against MongoDB collections; same table/column/PK/unique names, `_id` = encoded primary key |
+| Key/value | `redis` client | `src/utils/kv.js` collection `_kv` (hashes, sorted sets, sets, counters, TTL) with atomic `$inc`/`$addToSet` |
+| Pub/sub | Redis pub/sub | capped `_pubsub` collection (1 s poll) |
+| Config | `DATABASE_URL`, `REDIS_URL`, `MYSQL_*`, `REDIS_*` | `MONGODB_URI`, validated and masked |
+| Dependencies | `mysql`, `redis` | `mongodb ^6.22` only |
+
+The command layer was **not** rewritten: `src/utils/mysql.js`,
+`src/botHandlers/mysqlHandler.js` and `src/utils/redis.js` keep the same
+function signatures (mysql2-style OK packets, `ER_DUP_ENTRY`, transaction
+handles, `hget/hset/hincrby/zadd/zrange/...`), so the ~350 query call sites and
+~460 Redis calls at 114/84 files keep working unchanged while the data lives in
+MongoDB. No command, handler or feature was deleted.
+
+### Correctness details worth knowing
+
+- **Economy is atomic.** `UPDATE ... SET money = money - 5` becomes
+  `$inc: {money: -5}`; `ON DUPLICATE KEY UPDATE money = money + ?` becomes an
+  upsert with `$inc` (tested with 25 parallel increments — no lost updates, no
+  negative balance). Guard clauses (`WHERE money >= ?`) are part of the same
+  `findOneAndUpdate` filter, so a spend cannot race.
+- **Multi-statement strings** (~53) are split by the tokenizer and executed in
+  order; the single-statement ones are single atomic operations.
+- **Generated columns** (`animal_count.total`) are computed on **read**. An
+  earlier version computed them on write and persisted `{}` into the document —
+  fixed, with a regression test.
+- **AUTO_INCREMENT** is emulated with a `_sequences` collection seeded from the
+  current `max(column)`, so existing ids never collide and `insertId` is
+  returned like mysql2.
+- **Big integers** stay exact: values above `Number.MAX_SAFE_INTEGER` are
+  returned as decimal strings, smaller ones as numbers, because the economy code
+  does `money + n`.
+- **Snowflakes**: `0` and `-0` are the same key; the encoder does not confuse
+  them.
+- **No transactions on a single MongoDB**: a standalone server has no
+  multi-document transactions, so the transaction facade falls back to a
+  per-handle session and reports it (`startSession()` returns `null`), while
+  Atlas replica sets use real transactions. Nothing throws.
+
+### Honest limitations
+
+- SQL is executed through a translator, not natively. Statements outside the
+  supported grammar throw with the statement text instead of silently doing
+  something else; `test/sqlParser.test.js` covers the 34 shapes that actually
+  appear in the command tree.
+- `mongodump`/Atlas backups are the operator's job (Atlas M0 has none).
+- The bot still needs internet access to Discord; the sandbox used for this
+  repair has none, so READY was not observed here. `MONGO_OFFLINE=true npm test`
+  (239 tests) plus `npm run verify:commands` (285 commands / 526 aliases) and
+  `node scripts/verifyDatabase.js` on the host are what was actually run.
+
+### Verification actually performed
+
+```
+MONGO_OFFLINE=true npm test        → 239 pass / 0 fail
+npm run verify:commands            → 285 command instances, 526 aliases, 50 admin, 0 errors
+node index.js --doctor             → MongoDB section reports the validated, masked URI
+node index.js (bad MONGODB_URI)    → one clear [MONGO]/[ACTION] block, exit 1, no fork loop
+```
+
+
 ## "ONLINE but `ohelp` / `o help` never answers" — a database error killed the cluster 2 s after READY (fixed)
 
 Field report: `[STATE] BOT_ONLINE`, `[STATE] PRESENCE_SYNCHRONIZED`,

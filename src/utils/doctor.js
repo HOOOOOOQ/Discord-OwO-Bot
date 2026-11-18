@@ -15,7 +15,7 @@
  *   - is the token still valid?
  *   - is MESSAGE CONTENT INTENT enabled for that application?
  *   - is the shard count sane?
- *   - are DATABASE_URL / REDIS_URL configured and reachable?
+ *   - is MONGODB_URI configured and reachable?
  *
  * It never starts a shard, never writes to the database and never prints
  * secrets.
@@ -28,7 +28,6 @@ const path = require('path');
 const buildInfo = require('./buildInfo.js');
 const gatewayBoot = require('./gatewayBoot.js');
 const discordApi = require('./discordApi.js');
-const dbUrl = require('./dbUrl.js');
 const intentsUtil = require('./intents.js');
 const gatewayCodes = require('./gatewayCodes.js');
 const presenceUtil = require('./presence.js');
@@ -481,31 +480,32 @@ async function collect(options = {}) {
 	}
 
 	// --- storage -------------------------------------------------------------
-	const mysql = dbUrl.resolveMysql(env);
-	const redis = dbUrl.resolveRedis(env);
-
-	if (!mysql.host) {
-		push(
-			FAIL,
-			'database',
-			'no host — set DATABASE_URL=mysql://user:pass@host:3306/owo (or MYSQL_HOST/MYSQL_USER/MYSQL_PASS)'
-		);
+	// MongoDB Atlas is the only datastore the bot needs (database + key/value +
+	// pub/sub all live there), so that is the only thing probed here.
+	const mongoClient = require('./mongo/client.js');
+	const uri = mongoClient.readUri(env);
+	const info = mongoClient.inspectUri(uri);
+	if (!info.ok) {
+		push(FAIL, 'database', `${info.reason} — ${info.action}`);
 	} else {
-		const mysqlProbe = await probe(mysql.host, mysql.port || 3306);
-		if (mysqlProbe.ok) push(OK, 'database reachable', `${mysql.host}:${mysql.port || 3306}`);
-		else push(WARN, 'database', `${mysql.host}:${mysql.port || 3306} — ${mysqlProbe.error}`);
+		push(OK, 'database uri', mongoClient.maskUri(uri));
+		const host = String(info.host).split(',')[0].split(':')[0];
+		const port = Number.parseInt(String(info.host).split(':')[1], 10) || 27017;
+		const mongoProbe = await probe(host, port);
+		if (mongoProbe.ok) push(OK, 'database reachable', `${host}:${port}`);
+		else
+			push(
+				WARN,
+				'database',
+				`${host}:${port} — ${mongoProbe.error} (Atlas may still work over SRV/DNS)`
+			);
 	}
-
-	if (!redis.host) {
+	if (env.DATABASE_URL || env.REDIS_URL || env.MYSQL_HOST || env.REDIS_HOST) {
 		push(
-			FAIL,
-			'redis',
-			'no host — set REDIS_URL=redis://:pass@host:6379/0 (or REDIS_HOST/REDIS_PASS)'
+			WARN,
+			'legacy variables',
+			'DATABASE_URL/REDIS_URL/MYSQL_*/REDIS_* are ignored — the bot stores everything in MongoDB Atlas'
 		);
-	} else {
-		const redisProbe = await probe(redis.host, redis.port || 6379);
-		if (redisProbe.ok) push(OK, 'redis reachable', `${redis.host}:${redis.port || 6379}`);
-		else push(WARN, 'redis', `${redis.host}:${redis.port || 6379} — ${redisProbe.error}`);
 	}
 
 	return checks;

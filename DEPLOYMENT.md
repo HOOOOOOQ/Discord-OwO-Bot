@@ -5,8 +5,7 @@
 | Component         | Version                                                                                 | Notes                                                |
 | ----------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Node.js           | ≥ 20 (tested on 22)                                                                     | `engines.node` in `package.json`                     |
-| MariaDB / MySQL   | 10.6+ / 8.0+                                                                            | schema in `secret/CREATE-OWO-TABLES.sql` (87 tables) |
-| Redis             | 6+                                                                                      | cooldowns, XP, prefixes, pub/sub                     |
+| MongoDB           | Atlas free tier (M0) or 7.0+ self-hosted                                                | the only datastore; layout from `secret/CREATE-OWO-TABLES.sql` (87 tables) |
 | Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | optional: hanya untuk `canvas` (memegen)             |
 | Internal services | image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh                  | `SHARDER_HOST` is optional (see §3)                  |
 
@@ -20,18 +19,18 @@ Minimum for a working instance:
 
 ```ini
 BOT_TOKEN=...
-OWNER_IDS=<your discord user id>     # empty => owner commands disabled
-DATABASE_URL=mysql://owo:password@172.18.0.1:3306/owo
-REDIS_URL=redis://:password@172.18.0.1:6379/0
+MONGODB_URI=mongodb+srv://user:password@cluster0.abcde.mongodb.net/ocean
 PREFIX=o
-CLUSTERS=2
+CLUSTERS=1
+OWNER_IDS=<your discord user id>     # optional: empty => owner commands disabled
 ```
 
-`DATABASE_URL`/`REDIS_URL` are the simple path: one connection string per
-service (`mysql://`, `mariadb://`, `redis://` or `rediss://` for TLS). The older
-`MYSQL_HOST/MYSQL_USER/MYSQL_PASS/MYSQL_DATABASE` and `REDIS_HOST/REDIS_PASS`
-variables still work and are used when no URL is set — a URL always wins. There
-is **no MongoDB** in this project; the database is MySQL/MariaDB.
+`MONGODB_URI` must be a `mongodb://` or `mongodb+srv://` URI. It is validated
+before connecting: a `mysql://`, `mariadb://`, `redis://` or `postgres://` value
+is rejected with an explanation instead of a stack trace, and the password is
+masked (`mongodb+srv://***@host/db`) in every log line. There is **no MySQL or
+Redis** in this project — old `DATABASE_URL`, `REDIS_URL`, `MYSQL_*` and
+`REDIS_*` variables are ignored (`--doctor` lists them as legacy).
 
 There is **no default owner**. If `OWNER_IDS` is empty the bot logs a warning and
 every owner-only command (including `eval`) is denied. `DEBUG` defaults to
@@ -55,7 +54,7 @@ Presence (status dot + activity line) is configured with `BOT_STATUS`,
 Run the self-check at any time:
 
 ```bash
-node index.js --doctor             # token, intents, presence, shard source, DB/Redis reachability
+node index.js --doctor             # token, intents, presence, shard source, MongoDB reachability
 node index.js --doctor --connect   # additionally performs a real gateway login (stop the bot first)
 ```
 
@@ -90,13 +89,14 @@ command is used, and the grant is written with a parameterized
 
 ## 2. Database
 
-```bash
-mysql -u root -p -e "CREATE DATABASE owo CHARACTER SET utf8mb4"
-mysql -u root -p owo < secret/CREATE-OWO-TABLES.sql
-mysql -u root -p owo < secret/OWO-TABLE-DATA.sql   # optional seed data
-```
+Nothing to install and nothing to import: create an Atlas cluster, a database
+user and allow your IP, then put the URI in `MONGODB_URI`. Tables are mapped to
+collections with the same names, primary keys and indexes, and the indexes are
+created on first boot (`ensureIndexes`). Seed data from
+`secret/OWO-TABLE-DATA.sql` is applied automatically the first time an empty
+database is seen.
 
-The schema is additive-compatible with the existing 87 tables; nothing in this
+The layout is additive-compatible with the existing 87 tables; nothing in this
 repair drops or renames a table or column. No migration is required for an
 existing deployment.
 
@@ -198,8 +198,8 @@ instead of leaving a process that looks alive but never comes online.
 
 ### Signals
 
-`SIGTERM`/`SIGINT` trigger a graceful shutdown: MySQL pool drains, Redis quits,
-sockets close, then the process exits. An `uncaughtException` is logged with
+`SIGTERM`/`SIGINT` trigger a graceful shutdown: in-flight Mongo sessions finish,
+the Mongo client closes, sockets close, then the process exits. An `uncaughtException` is logged with
 context, the same shutdown runs, and the process exits with code 1 so the
 supervisor/sharder respawns a clean process (`EXIT_ON_FATAL=false` opts out).
 
@@ -210,17 +210,17 @@ supervisor/sharder respawns a clean process (`EXIT_ON_FATAL=false` opts out).
 ## 4. Docker
 
 ```bash
-cp .env.example .env      # fill in BOT_TOKEN, OWNER_IDS, MYSQL_ROOT_PASSWORD, MYSQL_PASS
+cp .env.example .env      # fill in BOT_TOKEN and MONGODB_URI
 docker compose up -d --build
-docker compose ps        # bot health = MySQL + Redis reachable
+docker compose ps        # bot health = MongoDB reachable
 docker compose logs -f bot
 ```
 
 - `Dockerfile` is multi-stage: the builder compiles `canvas`, the runtime image
   contains only production dependencies (non-root user, `tini` as PID 1).
-- `docker-compose.yml` starts MariaDB (schema auto-imported on first boot) and
-  Redis with health checks and named volumes.
-- The image health check runs `scripts/healthcheck.js` (MySQL + Redis TCP).
+- `docker-compose.yml` starts the bot only; the database is MongoDB Atlas. A
+  local `mongo` service is provided (commented out) for offline testing.
+- The image health check runs `scripts/healthcheck.js` (MongoDB connectivity).
 - Docker is optional: nothing in the code path requires it.
 
 ## 5. Operational notes

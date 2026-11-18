@@ -13,9 +13,10 @@
  *   `ohelp`, `o help`, `O HELP`   -> matches
  *   `thelp`, `ohelp` with PREFIX=t -> does not match
  *
- * A guild may also configure its own prefix (`tsetprefix`), stored in Redis
- * under `prefix`. A Redis failure falls back to the default prefix instead of
- * dropping the message.
+ * A guild may also configure its own prefix (`osetprefix`), stored in the
+ * MongoDB key/value collection (`_kv`, field `prefix`) — this used to be Redis.
+ * A lookup failure falls back to the default prefix instead of dropping the
+ * message, and the value survives restarts because it lives in the database.
  */
 
 const log = require('./log.js');

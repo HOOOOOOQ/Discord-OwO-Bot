@@ -16,14 +16,20 @@ bot owners plus any users/roles listed in `COWONCY_ADMIN_IDS` /
 
 ## Self hosting
 
-Requirements: **Node.js ≥ 20**, **MariaDB/MySQL**, **Redis**, and — only if you
-want the image/meme commands — a native toolchain (`build-essential python3
+> **Bahasa Indonesia:** panduan langkah demi langkah (MongoDB Atlas + Pterodactyl)
+> ada di **[README.id.md](README.id.md)**. Bot ini sekarang **hanya** butuh
+> Discord Bot Token + MongoDB Atlas URI — tidak ada MySQL, MariaDB, atau Redis.
+
+
+
+Requirements: **Node.js ≥ 20**, a **MongoDB Atlas** cluster (free tier is
+enough), and — only if you want the image/meme commands — a native toolchain (`build-essential python3
 libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev`) for the
 `canvas` dependency. `canvas` is optional: without it the bot still installs and
 runs, and only the memegen commands are disabled.
 
 ```bash
-cp .env.example .env      # minimal: BOT_TOKEN, OWNER_IDS, DATABASE_URL, REDIS_URL
+cp .env.example .env      # minimal: BOT_TOKEN, MONGODB_URI, PREFIX
 npm ci
 npm run verify:commands   # loads every command module
 node index.js
@@ -31,9 +37,16 @@ node index.js
 
 There is **no default owner**: set `OWNER_IDS` to your Discord user id, otherwise
 all owner-only commands (including `eval`) stay disabled. `DEBUG` defaults to
-`false`. Six variables are enough to run: `BOT_TOKEN`, `OWNER_IDS`,
-`DATABASE_URL` (`mysql://user:pass@host:3306/owo`), `REDIS_URL`
-(`redis://:pass@host:6379/0`), `PREFIX`, `CLUSTERS`.
+`false`. Two variables are enough to run: `BOT_TOKEN` and `MONGODB_URI`
+(`mongodb+srv://user:pass@cluster0.abc.mongodb.net/ocean`). Add `PREFIX=o` if you
+want an explicit prefix and `CLUSTERS=1` on small panels. Tables and indexes are
+created automatically — there is no SQL file to import.
+
+Everything that used to live in MySQL and Redis now lives in MongoDB: tables map
+to collections (same names, keys and indexes), and the Redis hashes/sorted
+sets/counters became an atomic key-value collection. See
+[README.id.md](README.id.md#7-cara-kerja-database-singkat) for the technical
+summary and `scripts/verifyDatabase.js` for a live read/write check.
 
 Two things bite self-hosters, and both are checked at startup:
 
@@ -51,11 +64,11 @@ Presence is set on every `ready`: `BOT_STATUS` (`online|idle|dnd|invisible`),
 `BOT_PRESENCE_REFRESH_SEC`.
 
 ```bash
-node index.js --doctor             # token, intents, presence, shard source, DB/Redis
+node index.js --doctor             # token, intents, presence, MongoDB reachability
 node index.js --doctor --connect   # real gateway login (stop the bot first)
 ```
 
-Docker (bot + MariaDB + Redis) is available but optional:
+Docker (bot only — the database is Atlas) is available but optional:
 
 ```bash
 cp .env.example .env && docker compose up -d --build
@@ -67,9 +80,11 @@ risks: [SECURITY.md](SECURITY.md). Tests: [TESTING.md](TESTING.md). Repair log
 with root causes and verification: [FIXLOG.md](FIXLOG.md). Architecture and
 remaining technical debt: [ANALISIS.md](ANALISIS.md).
 
-The bot uses [MariaDB](https://mariadb.org/) and [Redis](https://redis.io/) for
-its databases. Some files may be missing due to security reasons and can be
-found [here](https://github.com/ChristopherBThai/Discord-OwO-Bot/tree/master/secret).
+The bot stores everything in [MongoDB](https://www.mongodb.com/atlas) (Atlas free
+tier works). The SQL schema file in `secret/` is still the source of truth for the
+table/collection layout, but it is parsed at runtime — nothing has to be imported.
+Some files may be missing due to security reasons and can be found
+[here](https://github.com/ChristopherBThai/Discord-OwO-Bot/tree/master/secret).
 
 ## Testing
 

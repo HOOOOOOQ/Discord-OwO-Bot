@@ -38,11 +38,16 @@ class OwO extends Base {
 		metrics.init({ enabled: config.metricsEnabled });
 		config.validate();
 
-		// Mysql connection
+		// MongoDB Atlas is the only datastore now: the SQL layer, the key/value
+		// store (old Redis) and the cluster pub/sub all live in this connection.
+		this.mongoClient = require('./utils/mongo/client.js');
 		this.mysql = require('./utils/mysql.js');
-
-		// Redis connection
 		this.redis = require('./utils/redis.js');
+		this.mongoReady = this.mongoClient.connect().catch((err) => {
+			log.error(`[MONGO] ${err.message}`);
+			log.error('[ACTION] the bot cannot run without MongoDB — fix MONGODB_URI and restart');
+			process.exit(1);
+		});
 
 		// Neo4j Logging
 		this.neo4j = require('./utils/neo4j.js');
@@ -196,14 +201,14 @@ class OwO extends Base {
 
 	async closeResources() {
 		try {
-			await this.mysql.con.end();
+			if (this.pubsub?.stop) this.pubsub.stop();
 		} catch (err) {
-			log.warn('mysql pool shutdown failed:', err.message);
+			log.warn('pubsub shutdown failed:', err.message);
 		}
 		try {
-			if (this.redis?.client?.quit) await this.redis.client.quit();
+			await this.mongoClient.close();
 		} catch (err) {
-			log.warn('redis shutdown failed:', err.message);
+			log.warn('mongodb shutdown failed:', err.message);
 		}
 		try {
 			for (const socket of [this.streamSocket, this.snailSocket]) {

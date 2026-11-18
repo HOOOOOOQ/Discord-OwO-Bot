@@ -14,8 +14,12 @@
  *
  *   BOT_STATUS=online|idle|dnd|invisible        (default: online)
  *   BOT_ACTIVITY_TYPE=playing|watching|listening|competing|streaming|custom
- *                                               (default: playing)
- *   BOT_ACTIVITY_TEXT="OCEAN BOT"               supports {guilds} {users} {shards} {prefix}
+ *                                               (default: watching)
+ *   BOT_ACTIVITY_TEXT="discord.gg/666family"    supports {guilds} {users} {shards} {prefix}
+ *
+ * Discord renders the activity as plain text: an activity text is NOT clickable
+ * (only a real link inside an embed is), so the server invite is additionally
+ * shown as a clickable embed link by the help/about commands.
  *   BOT_ACTIVITY_URL=https://twitch.tv/...      required for streaming (type 1)
  *   BOT_PRESENCE_REFRESH_SEC=600                re-apply every N seconds, 0 disables
  *
@@ -38,8 +42,8 @@ const TYPES = {
 };
 
 const DEFAULT_STATUS = 'online';
-const DEFAULT_TYPE = 'playing';
-const DEFAULT_TEXT = 'OCEAN BOT';
+const DEFAULT_TYPE = 'watching';
+const DEFAULT_TEXT = 'discord.gg/666family';
 const DEFAULT_REFRESH_SEC = 0;
 
 function normalizeChoice(value, allowed, fallback, name, warnings) {
