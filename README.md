@@ -20,8 +20,6 @@ bot owners plus any users/roles listed in `COWONCY_ADMIN_IDS` /
 > ada di **[README.id.md](README.id.md)**. Bot ini sekarang **hanya** butuh
 > Discord Bot Token + MongoDB Atlas URI — tidak ada MySQL, MariaDB, atau Redis.
 
-
-
 Requirements: **Node.js ≥ 20**, a **MongoDB Atlas** cluster (free tier is
 enough), and — only if you want the image/meme commands — a native toolchain (`build-essential python3
 libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev`) for the

@@ -232,14 +232,14 @@ collection/index dibuat otomatis.
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Install gagal: `cairo.h: No such file` / `node-gyp` error            | Image bukan hasil `pterodactyl/Dockerfile` (masih `yolks:nodejs_20`). Build image langkah 1 dan ganti nilai image di egg **dan** di install script.                                                                            |
 | Start tapi crash `Cannot find module 'canvas'`                       | `npm ci` dijalankan dengan image berbeda dari image runtime, atau Reinstall belum dijalankan setelah upload. Jalankan Reinstall, pastikan kedua image sama.                                                                    |
-| `[MONGO] could not connect … after 5 attempt(s)`                     | URI salah, user/password salah, atau IP belum di-allow. Atlas → Network Access → `0.0.0.0/0`; pastikan nama database ada di URI (`/ocean`).                                                                                      |
+| `[MONGO] could not connect … after 5 attempt(s)`                     | URI salah, user/password salah, atau IP belum di-allow. Atlas → Network Access → `0.0.0.0/0`; pastikan nama database ada di URI (`/ocean`).                                                                                    |
 | Server mati sendiri, log `heap out of memory`                        | `CLUSTERS` terlalu besar untuk RAM. Turunkan ke 1–2 (atau naikkan limit memori server).                                                                                                                                        |
 | Panel tetap "Starting" walau bot online                              | Log `bot ready: all shards connected` tidak terdeteksi; pastikan `LOG_LEVEL=info` (jangan `warn`/`error`), karena penanda itu level INFO.                                                                                      |
 | Command memegen error `Could not grab drake.jpg`                     | File `src/commands/commandList/memegen/img/*` tidak ikut ter-upload.                                                                                                                                                           |
 | Install berhenti di `verify:commands`                                | Registry command gagal dimuat (file kurang / `node_modules` korup). Cek log install, upload ulang file yang kurang, lalu Reinstall lagi.                                                                                       |
-| Bot online 1–2 detik lalu restart terus (`worker died … after fork`) | Kesalahan database saat modul command di-require. Sejak perbaikan ini tidak lagi mematikan cluster: cari `[DATABASE]` + baris `[ACTION]`, lalu perbaiki `MONGODB_URI`.                                                            |
-| `MONGODB_URI is not set` / `unsupported scheme "mysql:"`             | Variabel belum diisi, atau masih memakai URL MySQL lama. Isi `MONGODB_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/ocean`.                                                                                                    |
-| `legacy variables` di `--doctor`                                     | `DATABASE_URL`/`REDIS_URL`/`MYSQL_*`/`REDIS_*` masih ada di panel. Bot mengabaikannya; hapus supaya tidak membingungkan.                                                                                                        |
+| Bot online 1–2 detik lalu restart terus (`worker died … after fork`) | Kesalahan database saat modul command di-require. Sejak perbaikan ini tidak lagi mematikan cluster: cari `[DATABASE]` + baris `[ACTION]`, lalu perbaiki `MONGODB_URI`.                                                         |
+| `MONGODB_URI is not set` / `unsupported scheme "mysql:"`             | Variabel belum diisi, atau masih memakai URL MySQL lama. Isi `MONGODB_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/ocean`.                                                                                                  |
+| `legacy variables` di `--doctor`                                     | `DATABASE_URL`/`REDIS_URL`/`MYSQL_*`/`REDIS_*` masih ada di panel. Bot mengabaikannya; hapus supaya tidak membingungkan.                                                                                                       |
 | `node-pre-gyp ... 404 ... canvas-v2.11.2-node-v141`                  | Node di image terlalu baru (mis. v25): canvas 2.11.2 tidak punya prebuilt untuk ABI itu. Sejak perbaikan ini `canvas` **opsional**, jadi install tetap sukses dan bot tetap jalan (memegen mati).                              |
 | `pkg-config: not found` / `binding.gyp` gagal                        | Image tidak punya cairo/pango/pkg-config untuk mengompilasi canvas. Bot tetap jalan tanpa memegen; pakai image `pterodactyl/Dockerfile` kalau butuh memegen.                                                                   |
 | `git dep preparation failed`                                         | Dulu disebabkan `merge-images` (git dep) yang punya devDependency `canvas`; dependensi itu sudah dihapus dari repo. Kalau masih muncul, periksa akses git/HTTPS node ke GitHub.                                                |
@@ -587,14 +587,14 @@ Catatan:
 
 ## 9g. Optimasi RAM/CPU di panel kecil (2 GB)
 
-| Setelan                    | Rekomendasi                | Alasan                                                              |
-| -------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `CLUSTERS`                 | `1`                        | default 1; tiap cluster proses Node penuh (~200–350 MB) |
-| `DD_TRACE_ENABLED`         | `false`                    | agent tracing dd-trace memakan puluhan MB tanpa manfaat di panel    |
-| `SHARDS`                   | kosong                     | biar Discord menentukan; jangan paksa lebih besar dari perlu        |
-| `BOT_PRESENCE_REFRESH_SEC` | `0`                        | refresh presence terlalu sering = request gateway tambahan          |
-| `NODE_OPTIONS` (opsional)  | `--max-old-space-size=384` | membatasi heap V8 supaya GC jalan lebih awal                        |
-| `LOG_LEVEL`                | `info`                     | `debug` menghasilkan ribuan baris dan memperlambat panel            |
+| Setelan                    | Rekomendasi                | Alasan                                                           |
+| -------------------------- | -------------------------- | ---------------------------------------------------------------- |
+| `CLUSTERS`                 | `1`                        | default 1; tiap cluster proses Node penuh (~200–350 MB)          |
+| `DD_TRACE_ENABLED`         | `false`                    | agent tracing dd-trace memakan puluhan MB tanpa manfaat di panel |
+| `SHARDS`                   | kosong                     | biar Discord menentukan; jangan paksa lebih besar dari perlu     |
+| `BOT_PRESENCE_REFRESH_SEC` | `0`                        | refresh presence terlalu sering = request gateway tambahan       |
+| `NODE_OPTIONS` (opsional)  | `--max-old-space-size=384` | membatasi heap V8 supaya GC jalan lebih awal                     |
+| `LOG_LEVEL`                | `info`                     | `debug` menghasilkan ribuan baris dan memperlambat panel         |
 
 Cek pemakaian dari console panel: `Memory` normalnya 120–250 MB untuk 1–2
 cluster. Kalau mendekati batas, turunkan `CLUSTERS` dulu sebelum menaikkan RAM.

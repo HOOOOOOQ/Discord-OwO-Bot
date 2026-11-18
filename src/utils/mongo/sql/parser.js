@@ -21,6 +21,27 @@
  *   START TRANSACTION / COMMIT / ROLLBACK / SET ...
  */
 
+/**
+ * Number literals exactly as MySQL sees them.
+ *
+ * The bot builds SQL by concatenation, so snowflakes are written **unquoted**:
+ * `INSERT INTO user (id,count) VALUES (${msg.author.id},1)`. `Number()` would
+ * round an 18–19 digit id (777777777777777777 → 777777777777777792), which
+ * silently merges two different Discord accounts into one row. Integers that a
+ * double cannot hold are therefore kept as exact decimal strings; the value
+ * helpers (`values.js`) already compare and add those with BigInt.
+ */
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
+
+function exactNumberLiteral(text) {
+	if (/^-?\d+$/.test(text)) {
+		const big = BigInt(text);
+		if (big > MAX_SAFE || big < MIN_SAFE) return text;
+	}
+	return Number(text);
+}
+
 const KEYWORDS = new Set([
 	'SELECT',
 	'DISTINCT',
@@ -153,7 +174,7 @@ function tokenize(sql) {
 		if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(sql[i + 1] || ''))) {
 			let text = '';
 			while (i < length && /[0-9.]/.test(sql[i])) text += sql[i++];
-			tokens.push({ type: 'number', value: Number(text) });
+			tokens.push({ type: 'number', value: exactNumberLiteral(text) });
 			continue;
 		}
 		if (/[A-Za-z_$@]/.test(ch)) {
@@ -358,7 +379,12 @@ class Parser {
 	}
 
 	toNumber(node) {
-		if (node && node.type === 'literal' && typeof node.value === 'number') return node.value;
+		if (node && node.type === 'literal') {
+			if (typeof node.value === 'number') return node.value;
+			if (typeof node.value === 'string' && /^-?\d+$/.test(node.value.trim())) {
+				return Number(node.value);
+			}
+		}
 		return node;
 	}
 

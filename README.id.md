@@ -15,12 +15,12 @@ Prefix default: **`o`** — `ohelp` dan `o help` dua-duanya bisa.
 
 ## 1. Yang perlu disiapkan
 
-| Kebutuhan | Keterangan |
-| --- | --- |
-| Akun Discord + bot | https://discord.com/developers/applications |
-| MongoDB Atlas (gratis M0) | https://cloud.mongodb.com |
-| Pterodactyl panel | versi apa saja, egg Node.js 20/22 |
-| Node.js | **20 atau 22** (repo diuji di Node 22) |
+| Kebutuhan                 | Keterangan                                  |
+| ------------------------- | ------------------------------------------- |
+| Akun Discord + bot        | https://discord.com/developers/applications |
+| MongoDB Atlas (gratis M0) | https://cloud.mongodb.com                   |
+| Pterodactyl panel         | versi apa saja, egg Node.js 20/22           |
+| Node.js                   | **20 atau 22** (repo diuji di Node 22)      |
 
 RAM: 1 cluster ≈ 200–350 MB. Untuk panel 1–2 GB pakai `CLUSTERS=1`.
 
@@ -32,8 +32,8 @@ RAM: 1 cluster ≈ 200–350 MB. Untuk panel 1–2 GB pakai `CLUSTERS=1`.
    region terdekat (mis. Singapore) → Create.
 2. **Database Access** → **Add New Database User**
    - Username: `ocean`
-   - Password: klik *Autogenerate* dan **simpan** passwordnya
-   - Role: *Read and write to any database*
+   - Password: klik _Autogenerate_ dan **simpan** passwordnya
+   - Role: _Read and write to any database_
 3. **Network Access** → **Add IP Address** → **Allow Access from Anywhere**
    (`0.0.0.0/0`). Wajib: IP host Pterodactyl berubah-ubah.
 4. **Clusters** → **Connect** → **Drivers** → **Node.js** → salin connection
@@ -63,11 +63,11 @@ import file SQL apa pun.
 2. **Bot** → **Reset Token** → salin token (jangan pakai awalan `Bot `).
 3. **Bot** → **Privileged Gateway Intents** → nyalakan:
 
-   | Intent | Wajib? | Kenapa |
-   | --- | --- | --- |
-   | **Message Content Intent** | **WAJIB** | tanpa ini bot online tapi semua command diabaikan |
-   | Server Members | opsional | untuk fitur level/role member |
-   | Presence | tidak perlu | bot tidak membaca presence user |
+   | Intent                     | Wajib?      | Kenapa                                            |
+   | -------------------------- | ----------- | ------------------------------------------------- |
+   | **Message Content Intent** | **WAJIB**   | tanpa ini bot online tapi semua command diabaikan |
+   | Server Members             | opsional    | untuk fitur level/role member                     |
+   | Presence                   | tidak perlu | bot tidak membaca presence user                   |
 
 4. **OAuth2 → URL Generator** → scope `bot` + `applications.commands`,
    permissions `Administrator` (atau minimal Send Messages, Embed Links,
@@ -84,15 +84,15 @@ penyebab paling umum "bot online tapi tidak merespons".
    `package.json`, `package-lock.json`, `index.js`, `src/`, `secret/`.
 2. Tab **Startup**:
 
-   | Variable | Nilai | Catatan |
-   | --- | --- | --- |
-   | `MONGODB_URI` | `mongodb+srv://…/ocean` | **wajib** |
-   | `PREFIX` | `o` | prefix default |
-   | `CLUSTERS` | `1` | 1–2 untuk panel kecil |
-   | `DEBUG` | `false` | `true` = hanya guild di `DEBUG_WHITELIST` |
-   | `BOT_STATUS` | `online` | |
-   | `BOT_ACTIVITY_TYPE` | `watching` | |
-   | `BOT_ACTIVITY_TEXT` | `discord.gg/666family` | |
+   | Variable            | Nilai                   | Catatan                                   |
+   | ------------------- | ----------------------- | ----------------------------------------- |
+   | `MONGODB_URI`       | `mongodb+srv://…/ocean` | **wajib**                                 |
+   | `PREFIX`            | `o`                     | prefix default                            |
+   | `CLUSTERS`          | `1`                     | 1–2 untuk panel kecil                     |
+   | `DEBUG`             | `false`                 | `true` = hanya guild di `DEBUG_WHITELIST` |
+   | `BOT_STATUS`        | `online`                |                                           |
+   | `BOT_ACTIVITY_TYPE` | `watching`              |                                           |
+   | `BOT_ACTIVITY_TEXT` | `discord.gg/666family`  |                                           |
 
 3. `BOT_TOKEN` boleh di Startup Variables **atau** di file `.env`
    (contoh lengkap: `.env.example`).
@@ -108,7 +108,16 @@ penyebab paling umum "bot online tapi tidak merespons".
    [STATE] PRESENCE_SYNCHRONIZED — status=online watching "discord.gg/666family"
    ```
 
-6. Di Discord: `ohelp`, `o daily`, `obalance`.
+6. Di Discord: `ohelp`, `o help`, `OHELP`, `o daily`, `obalance`, `o stats`.
+   Salah ketik (`o hlep`) sekarang **dijawab** dengan pesan
+   "I don't know the command …", tidak lagi diam seperti bot mati
+   (dibatasi sekali per 10 detik per user supaya tidak spam).
+
+Kalau gateway gagal dibuka (token salah, internet host putus, intents salah),
+console sekarang menulis `[GATEWAY] connect attempt 1/6 failed — retrying …`
+dan pada percobaan ke-6 berhenti dengan `[FATAL]` + exit code 1, sehingga panel
+bisa merestart bot. Sebelumnya bot bisa "running" tanpa pernah Online dan tanpa
+pesan apa pun.
 
 ---
 
@@ -118,7 +127,7 @@ penyebab paling umum "bot online tapi tidak merespons".
 node index.js --doctor        # cek token, intent, MongoDB, presence (aman dijalankan)
 node scripts/verifyDatabase.js  # uji tulis/baca database asli (bot sebaiknya stop)
 node index.js --verify        # pastikan semua command ter-load
-npm test                      # 239 unit test
+npm test                      # 264 unit + regresi test
 ```
 
 `verifyDatabase.js` menulis data uji dengan akun palsu
@@ -131,18 +140,18 @@ XP/ranking, prefix, cooldown, lalu **menghapusnya lagi**.
 
 Diuji otomatis (`npm test` + `scripts/verifyDatabase.js`):
 
-| Area | Command / alur yang diperiksa |
-| --- | --- |
-| Prefix | `ohelp`, `o help`, prefix custom per server (`o prefix !`), `thelp` diabaikan |
-| Tampilan | `ohelp`/`oinvite` mengirim embed + tombol **Join Community** (link ke https://discord.gg/666family) |
-| Ekonomi | `obalance`/`ocowoncy`, `odaily`, transfer antar user, belanja tervalidasi |
-| Inventory | `oinventory`, tambah hewan, `osell`, `osacrifice`, box/crate |
-| Battle | `obattle`, `opet team`, `oweapon`, expiry battle (`TIMESTAMPDIFF`) |
-| Giveaway | insert/update `giveaway`, pemenang |
-| Quest | `o quest`, progres harian |
-| XP & ranking | `olevel`, `otop`, `ome` (sorted set XP global + per server) |
-| Cooldown | `odaily` sekali sehari, cooldown per command |
-| Lain-lain | `o stats`, `o ping`, `o invite`, `o help`, `o prefix`, `o guildlink` |
+| Area         | Command / alur yang diperiksa                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Prefix       | `ohelp`, `o help`, prefix custom per server (`o prefix !`), `thelp` diabaikan                       |
+| Tampilan     | `ohelp`/`oinvite` mengirim embed + tombol **Join Community** (link ke https://discord.gg/666family) |
+| Ekonomi      | `obalance`/`ocowoncy`, `odaily`, transfer antar user, belanja tervalidasi                           |
+| Inventory    | `oinventory`, tambah hewan, `osell`, `osacrifice`, box/crate                                        |
+| Battle       | `obattle`, `opet team`, `oweapon`, expiry battle (`TIMESTAMPDIFF`)                                  |
+| Giveaway     | insert/update `giveaway`, pemenang                                                                  |
+| Quest        | `o quest`, progres harian                                                                           |
+| XP & ranking | `olevel`, `otop`, `ome` (sorted set XP global + per server)                                         |
+| Cooldown     | `odaily` sekali sehari, cooldown per command                                                        |
+| Lain-lain    | `o stats`, `o ping`, `o invite`, `o help`, `o prefix`, `o guildlink`                                |
 
 Semua 285 command (526 alias) tetap terdaftar — tidak ada yang dihapus.
 
@@ -172,15 +181,15 @@ Detail teknis: `src/utils/mongo/` (`client.js`, `schema.js`, `store.js`,
 
 ## 8. Kalau ada masalah
 
-| Gejala di console | Arti & solusi |
-| --- | --- |
-| `MONGODB_URI is not set` | isi Startup Variable `MONGODB_URI` |
-| `MONGODB_URI uses an unsupported scheme "mysql:"` | masih URL MySQL; ganti ke `mongodb+srv://…` |
-| `could not connect … after 5 attempt(s)` | user/password salah, IP belum di-allow, atau nama cluster salah |
-| `MONGODB_URI has no username:password` | format harus `mongodb+srv://USER:PASS@host/db` |
-| Bot online tapi command diam | Message Content Intent belum ON di Developer Portal, atau `DEBUG=true` dengan whitelist kosong |
-| `Could not find captcha.js` | normal (file itu tidak ada di repo) |
-| `InfluxDB is inactive` | normal, integrasi opsional |
+| Gejala di console                                 | Arti & solusi                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `MONGODB_URI is not set`                          | isi Startup Variable `MONGODB_URI`                                                             |
+| `MONGODB_URI uses an unsupported scheme "mysql:"` | masih URL MySQL; ganti ke `mongodb+srv://…`                                                    |
+| `could not connect … after 5 attempt(s)`          | user/password salah, IP belum di-allow, atau nama cluster salah                                |
+| `MONGODB_URI has no username:password`            | format harus `mongodb+srv://USER:PASS@host/db`                                                 |
+| Bot online tapi command diam                      | Message Content Intent belum ON di Developer Portal, atau `DEBUG=true` dengan whitelist kosong |
+| `Could not find captcha.js`                       | normal (file itu tidak ada di repo)                                                            |
+| `InfluxDB is inactive`                            | normal, integrasi opsional                                                                     |
 
 Untuk melihat pesan berhenti di langkah mana:
 

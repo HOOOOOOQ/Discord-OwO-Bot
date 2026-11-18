@@ -90,12 +90,12 @@ graceful shutdown, and pool/connection `error` events have listeners.
 
 ## Known, documented residual risks
 
-| Item                                                     | Why it is still open                                                | Mitigation                                                                              |
-| -------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `tar` (critical) via `canvas@2` → `@mapbox/node-pre-gyp` | Fixed only in `canvas@3`, a breaking change for every image command | Not reachable from untrusted input (build-time tooling); track for a canvas 3 migration |
-| `dd-trace@0.31` (high, EOL)                              | Major upgrade to 6.x changes APM behaviour                          | Only initialised outside debug mode; upgrade scheduled                                  |
-| `patreon`, `patreon-discord` (high, abandoned)           | Upstream SDK abandoned                                              | Optional integration, disabled without credentials                                      |
-| `mathjs@6` (high, prototype pollution)                   | Engine is shared by `owo math`; v6→v15 is a large jump              | Expression evaluation runs in a sandboxed worker with import/createUnit/parse disabled  |
+| Item                                                     | Why it is still open                                                | Mitigation                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `tar` (critical) via `canvas@2` → `@mapbox/node-pre-gyp` | Fixed only in `canvas@3`, a breaking change for every image command | Not reachable from untrusted input (build-time tooling); track for a canvas 3 migration   |
+| `dd-trace@0.31` (high, EOL)                              | Major upgrade to 6.x changes APM behaviour                          | Only initialised outside debug mode; upgrade scheduled                                    |
+| `patreon`, `patreon-discord` (high, abandoned)           | Upstream SDK abandoned                                              | Optional integration, disabled without credentials                                        |
+| `mathjs@6` (high, prototype pollution)                   | Engine is shared by `owo math`; v6→v15 is a large jump              | Expression evaluation runs in a sandboxed worker with import/createUnit/parse disabled    |
 | Multi-statement strings                                  | ~53 legacy statements combine several writes                        | Translated into ordered Mongo writes with atomic `$inc`; see §3 and `src/utils/mongo/sql` |
 
 Run `npm run audit` for the current, authoritative list.

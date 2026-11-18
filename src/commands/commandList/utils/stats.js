@@ -6,6 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const { shardFor } = require('../../../utils/shardLookup.js');
 const request = require('../../../utils/http.js');
 
 module.exports = new CommandInterface({
@@ -40,16 +41,26 @@ module.exports = new CommandInterface({
 		let guilds = info ? info.guilds : p.client.guilds.size;
 		let users = info ? info.users : p.client.users.size;
 
-		let ping = p.client.shards.get(p.client.guildShardMap[p.msg.channel.guild.id]).latency;
+		let ping = shardFor(p.client, p.msg.channel.guild.id).latency;
 
 		let rows = await p.query(sql);
+		// `SUM(...)` is NULL while a table is still empty, which is exactly the
+		// state of a freshly created database: `o stats` used to throw
+		// "Cannot read properties of null" on a new install. Missing/NULL sums
+		// are read as 0.
+		const sums = rows[1] && rows[1][0] ? rows[1][0] : {};
+		const total = rows[0] && rows[0][0] ? rows[0][0] : {};
+		const num = (value) => {
+			const parsed = Number.parseInt(value, 10);
+			return Number.isFinite(parsed) ? parsed : 0;
+		};
 		let totalAnimals =
-			parseInt(rows[1][0].common) +
-			parseInt(rows[1][0].uncommon) +
-			parseInt(rows[1][0].rare) +
-			parseInt(rows[1][0].epic) +
-			parseInt(rows[1][0].mythical) +
-			parseInt(rows[1][0].legendary);
+			num(sums.common) +
+			num(sums.uncommon) +
+			num(sums.rare) +
+			num(sums.epic) +
+			num(sums.mythical) +
+			num(sums.legendary);
 		let disabled = '';
 		for (let i in rows[2]) {
 			disabled += rows[2][i].command + ', ';
@@ -84,23 +95,23 @@ module.exports = new CommandInterface({
 					name: 'Global information',
 					value:
 						'```md\n<TotalOwOs:  ' +
-						p.global.toFancyNum(rows[0][0].total) +
+						p.global.toFancyNum(num(total.total)) +
 						'>\n<OwOUsers:   ' +
-						p.global.toFancyNum(rows[0][0].user) +
+						p.global.toFancyNum(num(total.user)) +
 						'>``````md\n<animalsCaught: ' +
 						p.global.toFancyNum(totalAnimals) +
 						'>\n<common: ' +
-						p.global.toFancyNum(rows[1][0].common) +
+						p.global.toFancyNum(num(sums.common)) +
 						'>\n<uncommon: ' +
-						p.global.toFancyNum(rows[1][0].uncommon) +
+						p.global.toFancyNum(num(sums.uncommon)) +
 						'>\n<rare: ' +
-						p.global.toFancyNum(rows[1][0].rare) +
+						p.global.toFancyNum(num(sums.rare)) +
 						'>\n<epic: ' +
-						p.global.toFancyNum(rows[1][0].epic) +
+						p.global.toFancyNum(num(sums.epic)) +
 						'>\n<mythical: ' +
-						p.global.toFancyNum(rows[1][0].mythical) +
+						p.global.toFancyNum(num(sums.mythical)) +
 						'>\n<legendary: ' +
-						p.global.toFancyNum(rows[1][0].legendary) +
+						p.global.toFancyNum(num(sums.legendary)) +
 						'>```',
 				},
 				{

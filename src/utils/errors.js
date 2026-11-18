@@ -69,7 +69,12 @@ exports.logFailure = function (err, meta = {}) {
 		.map(([key, value]) => `${key}=${value}`)
 		.join(' ');
 	const transient = exports.isTransient(err);
-	const line = `${context ? context + ' ' : ''}error=${detail.name}: ${detail.message}`;
+	// Category tag: a failure raised while serving a command is a `[COMMAND]`
+	// event, everything else is a generic `[ERROR]`. The tag makes
+	// `grep '\[COMMAND\]' bot.log` show exactly the user-facing failures.
+	const isCommand = Boolean(meta.command || (meta.stage && /command|dispatch/.test(meta.stage)));
+	const tag = isCommand ? '[COMMAND]' : '[ERROR]';
+	const line = `${tag} ${context ? context + ' ' : ''}error=${detail.name}: ${detail.message}`;
 	if (transient) log.warn(`handled (transient) ${line}`);
 	else log.error(`handled ${line}`);
 	if (detail.stack && !transient) log.debug(detail.stack);
@@ -119,15 +124,25 @@ exports.isShuttingDown = () => shuttingDown;
 exports.runShutdown = async function (reason, code = 0) {
 	if (shuttingDown) return;
 	shuttingDown = true;
+	// A panel "Stop" waits for this. Hooks that hang must not keep the process
+	// alive, so each one is capped (SHUTDOWN_HOOK_TIMEOUT_MS, default 5 s).
+	const hookTimeout = Number.parseInt(process.env.SHUTDOWN_HOOK_TIMEOUT_MS, 10) || 5000;
 	log.warn(`shutdown requested (${reason})`);
 	for (const hook of shutdownHooks) {
+		let timer;
 		try {
 			await Promise.race([
 				Promise.resolve(hook(reason)),
-				new Promise((resolve) => setTimeout(resolve, 5000)),
+				// ref'd on purpose: an unref'd cap would let a hanging hook end the
+				// process with code 0 instead of the code we were asked to exit with
+				new Promise((resolve) => {
+					timer = setTimeout(resolve, hookTimeout);
+				}),
 			]);
 		} catch (err) {
 			log.warn('shutdown hook failed:', err.message);
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 	log.info(`shutdown complete (${reason})`);

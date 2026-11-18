@@ -73,6 +73,14 @@ function inspectUri(uri) {
 		return { ok: false, reason: 'MONGODB_URI has no host', action: 'check the value after "@"' };
 	}
 	if (!credentials) {
+		// A local mongod started without `--auth` (docker, a test box) is a
+		// legitimate target; Atlas and every public deployment are not. Only the
+		// loopback host is allowed through without credentials, and it is
+		// reported so it cannot be mistaken for a real Atlas setup.
+		const local = /^(localhost|127\.0\.0\.1|::1)(:\d+)?$/i.test(host);
+		if (local) {
+			return { ok: true, scheme, host, database: database || DEFAULT_DB, local: true };
+		}
 		return {
 			ok: false,
 			reason: 'MONGODB_URI has no username:password',
@@ -137,6 +145,12 @@ async function connect(options = {}) {
 		const err = new Error(`${info.reason}. ${info.action}`);
 		err.code = 'MONGODB_URI_INVALID';
 		throw err;
+	}
+
+	if (info.local) {
+		log.warn(
+			'[MONGO] connecting to a loopback MongoDB without credentials — only valid for a local mongod started without --auth'
+		);
 	}
 
 	const attempts =

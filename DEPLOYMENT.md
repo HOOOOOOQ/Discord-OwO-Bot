@@ -2,12 +2,12 @@
 
 ## Requirements
 
-| Component         | Version                                                                                 | Notes                                                |
-| ----------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Node.js           | ≥ 20 (tested on 22)                                                                     | `engines.node` in `package.json`                     |
+| Component         | Version                                                                                 | Notes                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Node.js           | ≥ 20 (tested on 22)                                                                     | `engines.node` in `package.json`                                           |
 | MongoDB           | Atlas free tier (M0) or 7.0+ self-hosted                                                | the only datastore; layout from `secret/CREATE-OWO-TABLES.sql` (87 tables) |
-| Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | optional: hanya untuk `canvas` (memegen)             |
-| Internal services | image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh                  | `SHARDER_HOST` is optional (see §3)                  |
+| Native toolchain  | gcc/g++, python3, libcairo2-dev, libpango1.0-dev, libjpeg-dev, libgif-dev, librsvg2-dev | optional: hanya untuk `canvas` (memegen)                                   |
+| Internal services | image-gen (`GEN_API_HOST`/`IMAGE_GEN_*`), optional Patreon/DBL/Weeb.sh                  | `SHARDER_HOST` is optional (see §3)                                        |
 
 ## 1. Configuration
 
