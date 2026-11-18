@@ -44,6 +44,7 @@ const gatewayCodes = require('./gatewayCodes.js');
 const DEFAULT_READY_TIMEOUT_MS = 45000;
 
 let installed = false;
+let STATE_DUPLICATES = 0;
 const GATEWAY_OPCODES = {
 	DISPATCH: 0,
 	HEARTBEAT: 1,
@@ -91,6 +92,8 @@ const state = {
 	lastPacket: null,
 	lastError: null,
 	clusterId: null,
+	activeClient: null,
+	activeRange: null,
 	watchdogArmed: false,
 	watchdogReported: false,
 };
@@ -164,6 +167,9 @@ function reportStage(stage, detail) {
 				name: 'oceanStage',
 				stage,
 				detail: detail || null,
+				// The master maps acknowledgements by cluster id, so it must travel
+				// with every beacon (it is known only after the connect message).
+				clusterId: state.clusterId,
 				pid: process.pid,
 				at: Date.now(),
 			});
@@ -533,6 +539,28 @@ function install(options = {}) {
 	const originalConnect = proto.connect;
 	proto.connect = function patchedConnect(...args) {
 		const env = options.env || process.env;
+		// One gateway client per shard range per worker. eris-sharder would create a
+		// second client if the assignment were ever delivered twice, and two
+		// IDENTIFYs for the same shards invalidate each other's session (flapping).
+		const opts = this.options || {};
+		const range =
+			opts.firstShardID === undefined
+				? null
+				: `${opts.firstShardID}-${
+						opts.lastShardID === undefined ? opts.firstShardID : opts.lastShardID
+				  }`;
+		if (range && state.activeClient && state.activeClient !== this && state.activeRange === range) {
+			log.error(
+				`[GATEWAY] refused a second gateway connection for shards ${range} — ` +
+					'eris-sharder delivered the shard assignment twice; keeping the first client'
+			);
+			STATE_DUPLICATES++;
+			return Promise.resolve();
+		}
+		if (range) {
+			state.activeClient = this;
+			state.activeRange = range;
+		}
 		try {
 			const { presence: initial, resolved, activity } = identifyPresence(env);
 			state.clients++;
@@ -608,4 +636,5 @@ module.exports = {
 	connectTimeoutMs,
 	reportStage,
 	state,
+	duplicates: () => STATE_DUPLICATES,
 };
