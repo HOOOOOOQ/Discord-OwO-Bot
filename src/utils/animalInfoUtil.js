@@ -9,6 +9,20 @@ let animalJson = require('../data/animal.json');
 const mysql = require('./../botHandlers/mysqlHandler.js');
 let bot;
 
+/**
+ * Retry timers must never keep the process alive.
+ *
+ * `initialize()` runs at require time, before the bot exists, and used to loop
+ * a ref'd 5 s timer until a bot was attached — which is why every short-lived
+ * script (tests, --doctor, healthcheck) hung after finishing, and why a
+ * database outage produced an endless retry chain.
+ */
+function retryLater(fn, delayMs = 5000) {
+	const timer = setTimeout(fn, delayMs);
+	if (typeof timer.unref === 'function') timer.unref();
+	return timer;
+}
+
 class AnimalJson {
 	constructor() {
 		this.initialize = this.initialize.bind(this);
@@ -29,9 +43,7 @@ class AnimalJson {
 	async initialize() {
 		if (!bot) {
 			return new Promise((res) => {
-				setTimeout(() => {
-					res(this.initialize());
-				}, 5000);
+				retryLater(() => res(this.initialize()));
 			});
 		}
 		this.animalNameToKey = {};
@@ -47,9 +59,7 @@ class AnimalJson {
 			console.error(err);
 			console.error('Failed to fetch animals, retrying in 10s');
 			return new Promise((res) => {
-				setTimeout(() => {
-					res(this.initialize());
-				}, 5000);
+				retryLater(() => res(this.initialize()));
 			});
 		}
 

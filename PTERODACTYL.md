@@ -80,7 +80,7 @@ dan user `container`) + `cairo pango jpeg giflib librsvg pixman` (runtime),
 
 | Variable        | Nilai         | Catatan                                                                                |
 | --------------- | ------------- | -------------------------------------------------------------------------------------- |
-| `CLUSTERS`      | `2`           | **Jangan** biarkan 60 (default repo) di panel kecil → OOM. 1–2 cukup.                  |
+| `CLUSTERS`      | `1`           | default sekarang 1. 2 hanya untuk server >2 GB; tiap cluster proses Node penuh.        |
 | `PREFIX`        | `o`           | Prefix default. Bisa diubah per server: `o prefix <baru>`.                             |
 | `OWNER_IDS`     | id Discord-mu | Kosong = tidak ada owner, `eval` dan command owner lain mati.                          |
 | `DEBUG`         | `false`       | Kalau `true`, bot **hanya** menjawab guild di `DEBUG_WHITELIST`.                       |
@@ -589,7 +589,7 @@ Catatan:
 
 | Setelan                    | Rekomendasi                | Alasan                                                              |
 | -------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `CLUSTERS`                 | `1`–`2`                    | tiap cluster proses Node penuh (~120–200 MB). Default repo 60 = OOM |
+| `CLUSTERS`                 | `1`                        | default 1; tiap cluster proses Node penuh (~200–350 MB) |
 | `DD_TRACE_ENABLED`         | `false`                    | agent tracing dd-trace memakan puluhan MB tanpa manfaat di panel    |
 | `SHARDS`                   | kosong                     | biar Discord menentukan; jangan paksa lebih besar dari perlu        |
 | `BOT_PRESENCE_REFRESH_SEC` | `0`                        | refresh presence terlalu sering = request gateway tambahan          |

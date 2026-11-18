@@ -58,10 +58,10 @@ test('DEBUG and ALLOW_EVAL are opt-in, invalid booleans fall back', () => {
 	assert.strictEqual(loadConfig({ ALLOW_EVAL: undefined }).evalEnabled, false);
 });
 
-test('CLUSTERS override is bounded, invalid values fall back to 60', () => {
+test('CLUSTERS override is bounded, invalid values fall back to 1', () => {
 	assert.strictEqual(loadConfig({ CLUSTERS: '8' }).clusters, 8);
-	assert.strictEqual(loadConfig({ CLUSTERS: '9999' }).clusters, 60);
-	assert.strictEqual(loadConfig({ CLUSTERS: 'abc' }).clusters, 60);
+	assert.strictEqual(loadConfig({ CLUSTERS: '9999' }).clusters, 1);
+	assert.strictEqual(loadConfig({ CLUSTERS: 'abc' }).clusters, 1);
 });
 
 test('prefix override is normalised to lowercase', () => {

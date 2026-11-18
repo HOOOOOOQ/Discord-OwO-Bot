@@ -109,8 +109,8 @@ node index.js
 ```
 
 The master process resolves its shard range and then forks `CLUSTERS` cluster
-processes (override `CLUSTERS`; the repo default of 60 is meant for the public
-bot, 1–2 is right for a small server). Shards come from `SHARDS`/`SHARD_FIRST`/
+processes (default 1, sized for a 2 GB panel; 2 only on a larger server). Shards
+come from `SHARDS`/`SHARD_FIRST`/
 `SHARD_LAST`, else `SHARDER_HOST` when that (upstream-private) service exists,
 else Discord's `GET /gateway/bot` recommendation, else a single shard. In debug
 mode a single shard/cluster is started.

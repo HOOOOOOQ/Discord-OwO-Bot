@@ -9,13 +9,19 @@ const global = require('./global.js');
 const log = require('./log.js');
 const metrics = require('./metrics.js');
 
-/***** Datadog *****/
-var StatsD = require('node-dogstatsd').StatsD;
+/***** Datadog (optional — off unless configured) *****/
+// This used to create a StatsD socket to localhost:9125 on every boot. StatsD
+// is not part of the deployment any more, so the client is only built when the
+// operator asks for it; otherwise the in-process counters (src/utils/metrics.js)
+// are the only metrics backend.
 var statsdClient = null;
-try {
-	statsdClient = new StatsD();
-} catch (err) {
-	log.warn('logger: StatsD client unavailable:', err.message);
+if (String(process.env.METRICS_ENABLED || 'false').toLowerCase() === 'true') {
+	try {
+		var StatsD = require('node-dogstatsd').StatsD;
+		statsdClient = new StatsD(process.env.STATSD_HOST || undefined);
+	} catch (err) {
+		log.warn('logger: StatsD client unavailable:', err.message);
+	}
 }
 
 exports.increment = function (name, tags) {
@@ -54,14 +60,10 @@ winstonLogger = {
 exports.log = winstonLogger;
 */
 
-/***** StatsD *****/
-const SDC = require('statsd-client');
-const sdc = new SDC({
-	host: 'localhost',
-	port: 9125,
-	prefix: 'owo',
-	socketTimeout: 5000,
-});
+/***** StatsD (legacy sink, disabled) *****/
+// The old client was constructed unconditionally against localhost:9125, i.e. a
+// socket to 127.0.0.1 on every boot. Nothing in this deployment runs StatsD, and
+// no datastore is allowed to point at loopback, so nothing is created here.
 
 const incr = (exports.incr = function (name, amount = 1, tags = {}, msg) {
 	/* eslint-disable-next-line */
@@ -75,10 +77,12 @@ const incr = (exports.incr = function (name, amount = 1, tags = {}, msg) {
 		tags.guild = msg.channel.type == 1 ? 'dm' : msg.channel.guild.id;
 	}
 	metrics.increment(`${name}`, amount, tags);
-	try {
-		sdc.increment(`${name}`, amount, tags);
-	} catch (err) {
-		log.debug('logger: statsd increment failed:', err.message);
+	if (statsdClient) {
+		try {
+			statsdClient.increment(`${name}`, amount, tags);
+		} catch (err) {
+			log.debug('logger: statsd increment failed:', err.message);
+		}
 	}
 });
 
@@ -98,113 +102,94 @@ const decr = (exports.decr = function (name, amount = -1, tags = {}, msg) {
 		tags.guild = msg.channel.type == 1 ? 'dm' : msg.channel.guild.id;
 	}
 	metrics.decrement(`${name}`, -amount, tags);
-	try {
-		sdc.decrement(`${name}`, amount, tags);
-	} catch (err) {
-		log.debug('logger: statsd decrement failed:', err.message);
+	if (statsdClient) {
+		try {
+			statsdClient.decrement(`${name}`, amount, tags);
+		} catch (err) {
+			log.debug('logger: statsd decrement failed:', err.message);
+		}
 	}
 });
 
 const request = require('./http.js');
+
+// InfluxDB is an optional log sink of upstream OwO and is NOT part of this
+// deployment (no InfluxDB, no extra service). Every logger below used to POST
+// to `${INFLUXDB_HOST}/...` even when the variable was unset, which produced an
+// HTTP request to "undefined/command" and the noisy
+// "InfluxDB is inactive. Log upload will not work." warning on the first
+// command. With no host configured the functions now return immediately.
+const influxEnabled = () => Boolean(process.env.INFLUXDB_HOST);
+
 // Only display this error once per 5 minutes
 let influxErrorShown = false;
-setTimeout(() => {
+// unref() so a short-lived process (tests, --doctor, healthcheck) is never kept
+// alive by this housekeeping timer.
+const influxResetTimer = setTimeout(() => {
 	influxErrorShown = false;
 }, 5 * 60 * 60 * 1000);
+if (typeof influxResetTimer.unref === 'function') influxResetTimer.unref();
+
+/**
+ * POST a log record to the optional InfluxDB sink.
+ * No host configured → nothing happens (this is the normal self-hosted case).
+ */
+function postInflux(path, body, onError) {
+	if (!influxEnabled()) return;
+	body.password = process.env.INFLUXDB_PASS;
+	request(
+		{
+			method: 'POST',
+			uri: `${process.env.INFLUXDB_HOST}${path}`,
+			json: true,
+			body,
+		},
+		onError ||
+			function (err) {
+				if (err && !influxErrorShown) {
+					log.warn('InfluxDB is inactive. Log upload will not work.');
+					influxErrorShown = true;
+				}
+			}
+	);
+}
+exports.influxEnabled = influxEnabled;
 exports.command = function (command, msg) {
 	const body = {
-		password: process.env.INFLUXDB_PASS,
 		command: command,
 		user: msg.author.id,
 	};
 
-	request(
-		{
-			method: 'POST',
-			uri: `${process.env.INFLUXDB_HOST}/command`,
-			json: true,
-			body: body,
-		},
-		function (err) {
-			if (err && !influxErrorShown) {
-				log.warn('InfluxDB is inactive. Log upload will not work.');
-				influxErrorShown = true;
-			}
-		}
-	);
+	postInflux('/command', body);
 };
 
 exports.logstash = function (command, p) {
 	const body = {
-		password: process.env.INFLUXDB_PASS,
 		user: p.msg.author.id,
 		command: command,
 		text: p.msg.content,
 		guild: p.msg.channel.guild?.id || 'dm',
 	};
 
-	request(
-		{
-			method: 'POST',
-			uri: `${process.env.INFLUXDB_HOST}/metric`,
-			json: true,
-			body: body,
-		},
-		function (err) {
-			if (err && !influxErrorShown) {
-				log.warn('InfluxDB is inactive. Log upload will not work.');
-				influxErrorShown = true;
-			}
-		}
-	);
+	postInflux('/metric', body);
 };
 
 exports.logstashBanned = function (command, p) {
 	const body = {
-		password: process.env.INFLUXDB_PASS,
 		user: p.msg.author.id,
 		bannedCommand: command,
 		text: p.msg.content,
 		guild: p.msg.channel.guild?.id || 'dm',
 	};
 
-	request(
-		{
-			method: 'POST',
-			uri: `${process.env.INFLUXDB_HOST}/metric`,
-			json: true,
-			body: body,
-		},
-		function (err) {
-			if (err && !influxErrorShown) {
-				log.warn('InfluxDB is inactive. Log upload will not work.');
-				influxErrorShown = true;
-			}
-		}
-	);
+	postInflux('/metric', body);
 };
 
 exports.logstashCaptcha = function (metric) {
-	metric.password = process.env.INFLUXDB_PASS;
-
-	request(
-		{
-			method: 'POST',
-			uri: `${process.env.INFLUXDB_HOST}/captcha`,
-			json: true,
-			body: metric,
-		},
-		function (err) {
-			if (err && !influxErrorShown) {
-				log.warn('InfluxDB is inactive. Log upload will not work.');
-				influxErrorShown = true;
-			}
-		}
-	);
+	postInflux('/captcha', metric);
 };
 
 exports.logstashQos = function (metricKey, metric = {}) {
-	metric.password = process.env.INFLUXDB_PASS;
 	metric.metric = metricKey;
 	metric.server = process.env.SHARDER_SERVER;
 	metric.shards = global.getShardString();
@@ -213,18 +198,5 @@ exports.logstashQos = function (metricKey, metric = {}) {
 		metric.debug = true;
 	}
 
-	request(
-		{
-			method: 'POST',
-			uri: `${process.env.INFLUXDB_HOST}/qos`,
-			json: true,
-			body: metric,
-		},
-		function (err) {
-			if (err && !influxErrorShown) {
-				log.warn('InfluxDB is inactive. Log upload will not work.');
-				influxErrorShown = true;
-			}
-		}
-	);
+	postInflux('/qos', metric);
 };

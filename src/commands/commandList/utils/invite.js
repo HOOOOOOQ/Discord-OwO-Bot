@@ -6,6 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const communityLink = require('../../../utils/communityLink.js');
 
 module.exports = new CommandInterface({
 	alias: ['invite', 'link'],
@@ -42,6 +43,6 @@ module.exports = new CommandInterface({
 			color: p.config.embed_color,
 			thumbnail: icon ? { url: icon } : undefined,
 		};
-		p.send({ embed });
+		p.send(communityLink.attach({ embed }, p.config));
 	},
 });

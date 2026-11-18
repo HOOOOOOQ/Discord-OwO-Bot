@@ -134,6 +134,7 @@ Diuji otomatis (`npm test` + `scripts/verifyDatabase.js`):
 | Area | Command / alur yang diperiksa |
 | --- | --- |
 | Prefix | `ohelp`, `o help`, prefix custom per server (`o prefix !`), `thelp` diabaikan |
+| Tampilan | `ohelp`/`oinvite` mengirim embed + tombol **Join Community** (link ke https://discord.gg/666family) |
 | Ekonomi | `obalance`/`ocowoncy`, `odaily`, transfer antar user, belanja tervalidasi |
 | Inventory | `oinventory`, tambah hewan, `osell`, `osacrifice`, box/crate |
 | Battle | `obattle`, `opet team`, `oweapon`, expiry battle (`TIMESTAMPDIFF`) |
@@ -212,7 +213,12 @@ di luar folder server.
 
 ---
 
-## 10. Lisensi
+## 10. Laporan pengujian
+
+Hasil nyata setiap pemeriksaan (PASS/FAIL + yang belum bisa diverifikasi) ada di
+[LAPORAN-PENGUJIAN.md](LAPORAN-PENGUJIAN.md).
+
+## 11. Lisensi
 
 CC-BY-NC-SA-4.0, lihat `LICENSE`. Kredit asli: Christopher Thai (OwO Bot).
 Dokumentasi lain: `PTERODACTYL.md` (deploy), `FIXLOG.md` (riwayat perbaikan),

@@ -1,5 +1,47 @@
 # FIXLOG
 
+## Round 2 — "no extra services" hardening (StatsD/InfluxDB gone, KV waits for Mongo, Join Community button)
+
+Follow-up to the MongoDB migration. Field reports this round: a leftover socket to
+`localhost:9125`, a repeating `InfluxDB is inactive. Log upload will not work.`
+warning on the first command, `npm test`/`--doctor` hanging after finishing, and a
+default `CLUSTERS=60` that OOMs a 2 GB panel.
+
+Root causes and fixes:
+
+- **`src/utils/logger.js`** built a `statsd-client` bound to `localhost:9125` on
+  every import and POSTed to `${INFLUXDB_HOST}/command` even with the variable
+  unset (a request to `undefined/command`). Now: StatsD exists only when
+  `METRICS_ENABLED=true`, InfluxDB only when `INFLUXDB_HOST` is set, and the
+  housekeeping timer is `unref()`d. `statsd-client` was removed from
+  `package.json`/lockfile (nothing imports it).
+- **`src/utils/kv.js`** called `client.getStore()`, which throws when the client
+  is not connected yet. A prefix/cooldown read that raced the boot sequence
+  could kill the command. Every operation now `await client.whenReady()` first,
+  which waits for the pending connect exactly like Redis queued commands.
+- **`src/utils/animalInfoUtil.js`** ran `initialize()` at require time and
+  retried with a *ref'd* 5 s timer until a bot existed — the real reason
+  `node index.js --doctor`, `scripts/healthcheck.js` and `node --test` appeared
+  to hang, and why a database outage produced an endless retry chain. Retries
+  and `cacheUtil` TTL timers are `unref()`d now.
+- **`o help` / `o invite`** gained a real clickable button
+  (`src/utils/communityLink.js`, Discord link button style 5, label
+  "Join Community", URL `https://discord.gg/666family`). An invalid or
+  placeholder `guildlink` yields no component at all, because Discord rejects a
+  message with a broken link button.
+- **`CLUSTERS`** now defaults to **1** (`src/data/config.json`, `config.js`,
+  egg, docs). 60 was upstream's fleet default and is an instant OOM here; an
+  explicit value still wins and the doctor explains it.
+- **`pterodactyl/egg-ocean-bot.json`** defaults fixed: `CLUSTERS=1`,
+  `BOT_ACTIVITY_TYPE=watching`, `BOT_ACTIVITY_TEXT=discord.gg/666family`
+  (was `playing` / `o help`).
+
+Verification after these changes: `MONGO_OFFLINE=true npm test` → **246 pass /
+0 fail**; `verify:commands` → 285 commands / 526 aliases; ESLint and Prettier
+clean; `node --check` over all 523 tracked `.js` files; three bad-URI boot runs
+exit 1 without forking a worker. Details: [LAPORAN-PENGUJIAN.md](LAPORAN-PENGUJIAN.md).
+
+
 ## MongoDB-only migration — MySQL, MariaDB and Redis removed from the runtime
 
 The bot used to need three moving parts: a Discord token, MariaDB/MySQL and

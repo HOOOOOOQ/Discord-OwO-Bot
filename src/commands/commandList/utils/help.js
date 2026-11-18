@@ -6,6 +6,7 @@
  */
 
 const CommandInterface = require('../../CommandInterface.js');
+const communityLink = require('../../../utils/communityLink.js');
 
 const battleHelpUtil = require('../battle/util/battleHelpUtil.js');
 const emotes = require('../../../data/emotes.json');
@@ -126,7 +127,7 @@ function display(p) {
 		],
 	};
 
-	p.send({ embed });
+	p.send(communityLink.attach({ embed }, p.config));
 }
 
 async function describe(p, send, commandName, command) {
