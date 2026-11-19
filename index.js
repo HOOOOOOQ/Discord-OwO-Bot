@@ -130,6 +130,16 @@ function watchWorkers() {
 				`[ERROR] crash loop: ${exits.length} worker exits in 60s. The cluster never stays up, so the bot cannot be online.`
 			);
 			log.error('[ACTION] read the error lines above; then run: node index.js --doctor --connect');
+			// A panel only shows "running" while this process lives, so an endless
+			// respawn loop hides the failure completely. Stop instead of forking
+			// forever: the panel then reports the crash and the reason above.
+			if (String(process.env.EXIT_ON_CRASH_LOOP || 'true').toLowerCase() !== 'false') {
+				log.error(
+					'[FATAL] stopping the master to end the restart loop — fix the error above, then start again ' +
+						'(EXIT_ON_CRASH_LOOP=false keeps it respawning)'
+				);
+				process.exit(1);
+			}
 		}
 	});
 }
@@ -157,47 +167,56 @@ function superviseGateway(workerCount, sharder) {
 
 	// ---- shard assignment delivery -----------------------------------------
 	// eris-sharder's own queue is the only thing that makes a worker create an
-	// Eris client, and a throw inside its async nextTick callback is swallowed.
-	// Deliver the same message ourselves for every cluster that has not
-	// acknowledged it, verify with the worker's stage beacon, and never send a
-	// second copy once a worker is connected.
-	const acknowledged = new Set();
+	// Eris client. Two defects make it unreliable:
+	//
+	//   1. `Queue#queueItem` only executes while the queue is empty and nothing
+	//      ever removes `queue[0]`, so after the first assignment every cluster
+	//      *restart* is queued and never sent (worker online, no gateway, no log).
+	//   2. A throw inside the async `execute` handler is swallowed.
+	//
+	// `installQueueFix` repairs (1) in this process (no node_modules edit) and
+	// records whether each send actually happened; the fallback below only steps in
+	// when the library could not deliver, so a worker can never be sent two
+	// assignments (two Eris clients).
+	const ackedBy = new Map(); // clusterId -> worker id that acknowledged
 	const deliveries = new Map();
+	const libraryError = (clusterId) => shardAssignment.libraryDeliveryError(sharder, clusterId);
+
 	cluster.on('message', (worker, message) => {
 		if (!message || message.name !== 'oceanStage') return;
 		if (message.stage !== 'ipc_connect_received' && message.stage !== 'connect_called') return;
 		const clusterId = Number.isInteger(message.clusterId) ? message.clusterId : null;
-		if (clusterId === null || acknowledged.has(clusterId)) return;
-		acknowledged.add(clusterId);
-		// The worker owns the assignment now: remove eris-sharder's queued copy so it
-		// can never be delivered twice (a second connect = a second Eris client).
+		if (clusterId === null) return;
+		const previous = ackedBy.get(clusterId);
+		if (previous === worker.id) return;
+		ackedBy.set(clusterId, worker.id);
+		if (previous !== undefined && previous !== worker.id) {
+			log.info(
+				`[CLUSTER] cluster ${clusterId} is served by worker ${worker.id} now ` +
+					`(was ${previous}) — its shard assignment was delivered again`
+			);
+		}
+		// Erase any queued duplicate so a second connect can never be delivered.
 		if (shardAssignment.dropQueuedAssignment(sharder, clusterId)) {
 			log.debug(`[CLUSTER] dropped eris-sharder's duplicate assignment for cluster ${clusterId}`);
 		}
 	});
 
-	/**
-	 * When eris-sharder may be bypassed.
-	 *
-	 * - nothing has been delivered to any worker  → the library's queue is dead,
-	 *   deliver immediately (this is the outage that was reported);
-	 * - another cluster is already connected      → eris-sharder is alive and is
-	 *   serialising the remaining clusters on purpose (to respect Discord's
-	 *   identify concurrency), so only step in when it has been stuck for a while.
-	 */
-	const mayTakeOver = () => {
-		if (acknowledged.size === 0) return true;
-		return Date.now() - startedAt > 12000;
+	/** A cluster is only "delivered" for the worker that is running right now. */
+	const handleFor = (entry) => {
+		if (ackedBy.get(entry.clusterId) === entry.workerId) return 'acked';
+		return shardAssignment.libraryDelivered(sharder, entry.clusterId) ? 'library' : 'pending';
 	};
 
-	const attempt = () => {
+	const attempt = (why) => {
 		let report;
 		try {
 			report = shardAssignment.deliverPending({
 				sharder,
 				workers: cluster.workers,
-				acknowledged,
-				filter: mayTakeOver,
+				// Skip when this very worker acknowledged, or when eris-sharder's own
+				// send for this cluster succeeded. Everything else is a real gap.
+				acknowledgedFor: (entry) => handleFor(entry) !== 'pending',
 			});
 		} catch (err) {
 			log.error(`[CLUSTER] could not read eris-sharder's cluster plan: ${err.message}`);
@@ -206,11 +225,14 @@ function superviseGateway(workerCount, sharder) {
 		for (const entry of report.attempted) {
 			const previous = (deliveries.get(entry.clusterId) || 0) + 1;
 			deliveries.set(entry.clusterId, previous);
+			const reason = libraryError(entry.clusterId);
 			if (entry.ok) {
 				log.warn(
 					`[CLUSTER] sent the shard assignment for cluster ${entry.clusterId} (shards ` +
 						`${entry.firstShardID}~${entry.lastShardID}) to worker ${entry.workerId} directly — ` +
-						`eris-sharder did not deliver it (attempt ${previous})`
+						`eris-sharder did not deliver it${reason ? ` (${reason})` : ''}` +
+						(why ? ` [${why}]` : '') +
+						` (attempt ${previous})`
 				);
 			} else {
 				log.error(
@@ -222,12 +244,51 @@ function superviseGateway(workerCount, sharder) {
 		return report.delivered > 0;
 	};
 
-	// First attempt as soon as the plan exists, then retries with backoff.
-	// 1.5 s is already ~1000x the time eris-sharder's own send needs, so a healthy
-	// library is never raced; the later attempts cover a queue that dies later.
-	const attempts = [1500, 3000, 6000, 12000, 14000];
-	for (const delay of attempts) {
-		const t = setTimeout(() => attempt(), delay + 250);
+	// Every new worker gets its own attempts: a respawn (crash, panel restart of a
+	// cluster, OOM) starts with an empty acknowledgement, and the library may or
+	// may not have managed the send.
+	const forkAttempts = [1200, 3500, 8000];
+	cluster.on('fork', () => {
+		for (const delay of forkAttempts) {
+			const timer = setTimeout(() => attempt('respawn'), delay);
+			if (typeof timer.unref === 'function') timer.unref();
+		}
+	});
+
+	// Plus a slow safety sweep for the first two minutes: if a worker is alive and
+	// still has not acknowledged anything, say so with the real reason instead of
+	// letting the process sit there looking healthy.
+	const sweepUntil = startedAt + 120000;
+	let sweeps = 0;
+	const sweep = setInterval(() => {
+		if (Date.now() > sweepUntil) {
+			clearInterval(sweep);
+			return;
+		}
+		const missing = shardAssignment.plan(sharder).filter((entry) => handleFor(entry) === 'pending');
+		if (!missing.length) return;
+		sweeps += 1;
+		attempt('sweep');
+		if (sweeps === 3 || sweeps % 6 === 0) {
+			log.error(
+				`[GATEWAY] no acknowledgement from ${missing
+					.map((entry) => `cluster ${entry.clusterId} (worker ${entry.workerId})`)
+					.join(', ')} — the worker has no Eris client yet`
+			);
+			const report = shardAssignment.queueState(sharder);
+			log.error(
+				`[DIAG] eris-sharder queue: ${report.known ? `${report.pending} pending` : 'unknown'}` +
+					(report.pending ? ` [${report.clusters.join(', ')}]` : '') +
+					'; assignments are delivered by the master when the library drops them.'
+			);
+		}
+	}, 5000);
+	if (typeof sweep.unref === 'function') sweep.unref();
+
+	// First attempt as soon as the plan exists (the fork handler above already
+	// covers workers, this covers a plan that appears before any fork event).
+	for (const delay of [1500, 6000]) {
+		const t = setTimeout(() => attempt('boot'), delay);
 		if (typeof t.unref === 'function') t.unref();
 	}
 
@@ -326,7 +387,12 @@ function superviseGateway(workerCount, sharder) {
 				config.clusters = 1;
 				log.info('shard config: DEBUG mode forces a single shard (0~0 of 1)');
 			} else {
-				const resolved = await resolveShardConfig({ token: process.env.BOT_TOKEN });
+				// Use the normalised token: a panel value pasted as `Bot <token>` is
+				// rejected by GET /gateway/bot (401) and the shard count then silently
+				// falls back to 1.
+				const resolved = await resolveShardConfig({
+					token: tokenUtil.strip(process.env.BOT_TOKEN).token,
+				});
 				shards = resolved.shards;
 				firstShardID = resolved.firstShardID;
 				lastShardID = resolved.lastShardID;
@@ -335,8 +401,8 @@ function superviseGateway(workerCount, sharder) {
 			}
 
 			log.info(
-				`[CONFIG] prefix=${config.prefix} debug=${debug} clusters=${config.clusters} ` +
-					`shards=${shards} intents=${config.eris.clientOptions.intents}`
+				`[ENV] configuration loaded — prefix=${config.prefix} debug=${debug} ` +
+					`clusters=${config.clusters} shards=${shards} intents=${config.eris.clientOptions.intents}`
 			);
 
 			// Token + privileged-intent check. A disabled MESSAGE CONTENT INTENT used
@@ -366,8 +432,10 @@ function superviseGateway(workerCount, sharder) {
 		// after READY). Fail here, loudly, before any socket is opened.
 		// ------------------------------------------------------------------
 		const mongoClient = require('./src/utils/mongo/client.js');
+		log.info('[DATABASE] connecting to MongoDB...');
 		try {
 			await mongoClient.connect();
+			log.info('[DATABASE] connected — the bot can read and write its data');
 		} catch (err) {
 			log.error(`[MONGO] ${err.message}`);
 			if (err.action) log.error(`[ACTION] ${err.action}`);
@@ -380,13 +448,15 @@ function superviseGateway(workerCount, sharder) {
 
 		if (cluster.isMaster) {
 			log.info(
-				'Creating shards ' +
+				'[DISCORD] connecting to the gateway — shards ' +
 					firstShardID +
 					'~' +
 					lastShardID +
-					' out of ' +
+					' of ' +
 					shards +
-					' total shards!'
+					', ' +
+					config.clusters +
+					' cluster(s)'
 			);
 		}
 
@@ -435,6 +505,13 @@ function superviseGateway(workerCount, sharder) {
 			// signature. Exit so the master re-forks and the crash loop is reported.
 			if (cluster.isWorker) process.exit(1);
 			throw err;
+		}
+
+		if (cluster.isMaster && shardAssignment.installQueueFix(sharder)) {
+			log.info(
+				"[CLUSTER] repaired eris-sharder's assignment queue — a restarted cluster gets its " +
+					'shard assignment again (the library only delivers the first one)'
+			);
 		}
 
 		if (cluster.isWorker) {

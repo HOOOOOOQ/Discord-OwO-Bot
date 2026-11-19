@@ -15,7 +15,7 @@ npm run audit             # npm audit --omit=dev
 `npm ci` must succeed before any of the above (see DEPLOYMENT.md for the native
 `canvas` prerequisites). Always set `MONGO_OFFLINE=true` for offline runs: a few
 modules touch the Mongo client at require-time and would otherwise try to
-connect. **Result of the last full run: 264 pass / 0 fail (34 test files, ~13 s).**
+connect. **Result of the last full run: 274 pass / 0 fail (36 test files, ~21 s).**
 
 ## Test layout
 
@@ -27,6 +27,7 @@ connect. **Result of the last full run: 264 pass / 0 fail (34 test files, ~13 s)
 | `test/sandbox.test.js`          | eval disabled by default, scope shadowing, output redaction/truncation                                                                                                                                                                                                                                 |
 | `test/http.test.js`             | the `request` replacement: JSON, binary, `defaults()`, timeouts, non-2xx passthrough, single callback invocation                                                                                                                                                                                       |
 | `test/mysqlHandler.test.js`     | query timeout option, commit/rollback idempotency, single release, commit failure rollback, lease watchdog, `beginTransaction` failure                                                                                                                                                                 |
+| `test/shardAssignment.test.js`  | the rebuilt `connect` payload, delivery failures reported (not swallowed), the eris-sharder queue repair (every restart is delivered), and acknowledgement bound to a worker rather than a cluster id                                                                                                  |
 | `test/sqlParser.test.js`        | 34 real statement shapes from the command tree: tokenizer, multi-statement split, aliases, `ON DUPLICATE KEY` parsing, rejections                                                                                                                                                                      |
 | `test/sqlEngine.test.js`        | `INSERT IGNORE`, duplicate-key errors, atomic `$inc` for `ON DUPLICATE KEY UPDATE` (25 parallel increments), AUTO_INCREMENT/insertId, INNER vs LEFT JOIN, `UPDATE ... JOIN`, multi-table DELETE, COUNT/SUM/MAX/GROUP BY, subqueries, `TIMESTAMPDIFF`, `REPLACE INTO`, generated columns, snowflake PKs |
 | `test/platform.test.js`         | no InfluxDB/StatsD traffic when unconfigured, no loopback sockets, KV waits for MongoDB, "Join Community" link button, presence re-applied on resume                                                                                                                                                   |
@@ -92,6 +93,14 @@ failure.
 
 For the full stack: `docker compose up -d mongo` (commented service) and
 `MONGODB_URI=mongodb://127.0.0.1:27017/ocean npm run verify:db`.
+
+### Startup tests use a real master and real workers
+
+`test/startup.test.js` spawns `node index.js` and waits for it to exit on its own, with
+`NODE_OPTIONS=--require test/fixtures/memoryMongo.js` so the MongoDB client answers from
+`MemoryStore`. Discord is **not** reachable in CI/sandbox, so the token is rejected and the
+gateway path ends at `[FATAL]` — which is exactly the branch under test (assignment
+re-delivery + crash-loop exit). A real READY still needs a token and a network route.
 
 ## What is _not_ covered yet
 

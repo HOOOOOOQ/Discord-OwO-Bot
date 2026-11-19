@@ -63,5 +63,7 @@ exports.handle = function () {
 
 	// Only printed from a real gateway READY (or its one-time replay when
 	// eris-sharder loads this file after READY) — never from the master process.
+	log.info(`[DISCORD] successfully connected — ${tag}`);
+	log.info(`[BOT] Ready — prefix "${this.prefix}" (try "${this.prefix}help")`);
 	log.info(`[HEALTH] OCEAN IS ONLINE — ${tag}`);
 };

@@ -97,15 +97,19 @@ penyebab paling umum "bot online tapi tidak merespons".
 3. `BOT_TOKEN` boleh di Startup Variables **atau** di file `.env`
    (contoh lengkap: `.env.example`).
 4. Startup command: `node index.js`
-5. Tekan **Start**. Console yang sehat berisi:
+5. Tekan **Start**. Console yang sehat berisi (urutannya begini):
 
    ```
-   [MONGO] connected — mongodb+srv://***@cluster0.abcde.mongodb.net/ocean
-   config: prefix="o" — "ohelp" and "o help" both parse, other prefixes are ignored
-   [BOOT] running build <hash>
-   [GATEWAY] stage connect_called
-   [STATE] BOT_ONLINE
-   [STATE] PRESENCE_SYNCHRONIZED — status=online watching "discord.gg/666family"
+   [BOOT] OCEAN starting — node v22 … CLUSTERS=1
+   [ENV] configuration loaded — prefix=o debug=false clusters=1 shards=1 intents=130813
+   [DATABASE] connecting to MongoDB...
+   [DATABASE] connected — the bot can read and write its data
+   [DISCORD] connecting to the gateway — shards 0~0 of 1, 1 cluster(s)
+   [CLUSTER] repaired eris-sharder's assignment queue …
+   [GATEWAY] connecting with presence online — watching "discord.gg/666family" (attempt 1)
+   [DISCORD] successfully connected — gateway READY, N guild(s)
+   [BOT] Ready — prefix "o" (try "ohelp")
+   [HEALTH] OCEAN IS ONLINE
    ```
 
 6. Di Discord: `ohelp`, `o help`, `OHELP`, `o daily`, `obalance`, `o stats`.
@@ -114,10 +118,16 @@ penyebab paling umum "bot online tapi tidak merespons".
    (dibatasi sekali per 10 detik per user supaya tidak spam).
 
 Kalau gateway gagal dibuka (token salah, internet host putus, intents salah),
-console sekarang menulis `[GATEWAY] connect attempt 1/6 failed — retrying …`
-dan pada percobaan ke-6 berhenti dengan `[FATAL]` + exit code 1, sehingga panel
-bisa merestart bot. Sebelumnya bot bisa "running" tanpa pernah Online dan tanpa
-pesan apa pun.
+console menulis `[GATEWAY] connect attempt 1/6 failed — retrying …` dan pada
+percobaan ke-6 berhenti dengan `[FATAL]` + exit code 1, sehingga panel bisa
+merestart bot. Kalau worker mati berulang (4 kali dalam 60 detik), master ikut
+berhenti (`[FATAL] stopping the master to end the restart loop`) supaya panel
+menampilkan error, bukan server "running" yang sebenarnya tidak pernah online.
+
+> **Jangan memakai `node src/owo.js`.** File itu kelas worker, bukan entry point;
+> tanpa master ia tidak membuat client Discord sama sekali. Kalau dijalankan,
+> sekarang ia menjelaskan hal itu dan keluar dengan kode 1. Entry point selalu
+> `node index.js`.
 
 ---
 
@@ -127,7 +137,7 @@ pesan apa pun.
 node index.js --doctor        # cek token, intent, MongoDB, presence (aman dijalankan)
 node scripts/verifyDatabase.js  # uji tulis/baca database asli (bot sebaiknya stop)
 node index.js --verify        # pastikan semua command ter-load
-npm test                      # 264 unit + regresi test
+npm test                      # 274 unit + regresi test
 ```
 
 `verifyDatabase.js` menulis data uji dengan akun palsu
@@ -181,15 +191,19 @@ Detail teknis: `src/utils/mongo/` (`client.js`, `schema.js`, `store.js`,
 
 ## 8. Kalau ada masalah
 
-| Gejala di console                                 | Arti & solusi                                                                                  |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `MONGODB_URI is not set`                          | isi Startup Variable `MONGODB_URI`                                                             |
-| `MONGODB_URI uses an unsupported scheme "mysql:"` | masih URL MySQL; ganti ke `mongodb+srv://…`                                                    |
-| `could not connect … after 5 attempt(s)`          | user/password salah, IP belum di-allow, atau nama cluster salah                                |
-| `MONGODB_URI has no username:password`            | format harus `mongodb+srv://USER:PASS@host/db`                                                 |
-| Bot online tapi command diam                      | Message Content Intent belum ON di Developer Portal, atau `DEBUG=true` dengan whitelist kosong |
-| `Could not find captcha.js`                       | normal (file itu tidak ada di repo)                                                            |
-| `InfluxDB is inactive`                            | normal, integrasi opsional                                                                     |
+| Gejala di console                                      | Arti & solusi                                                                                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI is not set`                               | isi Startup Variable `MONGODB_URI`                                                                                           |
+| `MONGODB_URI uses an unsupported scheme "mysql:"`      | masih URL MySQL; ganti ke `mongodb+srv://…`                                                                                  |
+| `could not connect … after 5 attempt(s)`               | user/password salah, IP belum di-allow, atau nama cluster salah                                                              |
+| `MONGODB_URI has no username:password`                 | format harus `mongodb+srv://USER:PASS@host/db`                                                                               |
+| Bot online tapi command diam                           | Message Content Intent belum ON di Developer Portal, atau `DEBUG=true` dengan whitelist kosong                               |
+| `[GATEWAY] CONNECTION NOT STARTED` + `worker … online` | worker hidup tetapi belum menerima tugas shard; versi ini mengirim ulang otomatis, lihat baris `[CLUSTER] … delivered again` |
+| `[ERROR] crash loop: 4 worker exits in 60s`            | penyebabnya permanen (token/intent/DB); baca error di atasnya, perbaiki, start lagi                                          |
+| `[FATAL] stopping the master …`                        | sama seperti di atas — sengaja berhenti agar panel menampilkan crash                                                         |
+| `MONGODB_NOT_READY`                                    | koneksi DB belum siap; versi ini menunggu & mengulang, cek `[DATABASE]`/`[MONGO]` di atasnya                                 |
+| `Could not find captcha.js`                            | normal (file itu tidak ada di repo)                                                                                          |
+| `InfluxDB is inactive`                                 | normal, integrasi opsional                                                                                                   |
 
 Untuk melihat pesan berhenti di langkah mana:
 

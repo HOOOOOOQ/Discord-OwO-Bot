@@ -22,6 +22,19 @@ exports.handle = async function (msg, raw) {
 
 	trace.received(msg);
 
+	// Every command reads or writes MongoDB (economy, cooldowns, prefix, quests).
+	// The cluster starts its connection right after the gateway READY, so a message
+	// that arrives during that window used to fail with `MONGODB_NOT_READY`. Wait
+	// for the (retrying) connection instead of answering with an error.
+	if (this.mongoReady) {
+		try {
+			await this.mongoReady;
+		} catch (err) {
+			trace.rejected('database_not_ready', msg, { reason: err.message });
+			return;
+		}
+	}
+
 	if (this.optOut[msg.author.id]) {
 		trace.rejected('opted_out', msg);
 		return;

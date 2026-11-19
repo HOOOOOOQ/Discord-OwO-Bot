@@ -690,14 +690,18 @@ function install(options = {}) {
 					const wait =
 						typeof previousDelay === 'function' ? previousDelay(lastDelay, attempts) : 20000;
 					const reason = state.lastRestError || state.lastError || 'unknown';
+					const lastOne = state.connectFailures >= limit;
 					log.error(
 						`[GATEWAY] connect attempt ${state.connectFailures}/${limit} failed — ` +
-							`retrying in ${Math.round(wait / 1000)}s (${reason})`
+							(lastOne
+								? 'no attempts left, giving up'
+								: `retrying in ${Math.round(wait / 1000)}s`) +
+							` (${reason})`
 					);
 					if (state.connectFailures >= limit && !state.fatalConnectFailure) {
 						state.fatalConnectFailure = true;
 						log.error(
-							`[FATAL] the gateway never opened after ${state.connectFailures} attempts — ` +
+							`[FATAL] the gateway never opened after ${state.connectFailures} attempt(s) — ` +
 								'this is not a transient failure, so the worker stops instead of retrying forever'
 						);
 						log.error(
