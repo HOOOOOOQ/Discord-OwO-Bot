@@ -262,3 +262,91 @@ test('a second connect() for the same shard range is refused (no duplicate sessi
 	gatewayBoot.state.activeClient = null;
 	gatewayBoot.state.activeRange = null;
 });
+
+/* ------------------------------------------------------------------------- */
+/* Round 4: the queue itself is repaired, because a *restart* was never sent  */
+/* ------------------------------------------------------------------------- */
+
+test('the repair delivers every assignment, not just the first one', () => {
+	const queue = new Queue();
+	const sharder = fakeSharder({ queue });
+	// The real ClusterManager listener: send to the cluster's current worker.
+	const workers = { 1: new FakeWorker(1) };
+	queue.on('execute', (item) => {
+		const cluster = sharder.clusters.get(item.item);
+		workers[cluster.workerID].send(item.value);
+	});
+
+	assert.strictEqual(shardAssignment.installQueueFix(sharder), true);
+	assert.strictEqual(shardAssignment.installQueueFix(sharder), false, 'idempotent');
+
+	queue.queueItem({ item: 0, value: { name: 'connect', id: 0 } });
+	assert.strictEqual(workers[1].received.length, 1);
+	assert.strictEqual(queue.queue.length, 0, 'the queue does not accumulate');
+
+	// The cluster dies and is forked again with a new worker id — the case that
+	// used to be pushed into a queue nobody ever drained.
+	sharder.clusters.set(0, { workerID: 2, firstShardID: 0, lastShardID: 0 });
+	workers[2] = new FakeWorker(2);
+	queue.queueItem({ item: 0, value: { name: 'connect', id: 0 } });
+
+	assert.strictEqual(workers[2].received.length, 1, 'the respawned worker got its shards');
+	assert.strictEqual(queue.queue.length, 0);
+});
+
+test('a failed library send is recorded so the master can take over', () => {
+	const queue = new Queue();
+	const sharder = fakeSharder({ queue });
+	const dead = new FakeWorker(1, { dead: true });
+	queue.on('execute', (item) => {
+		const cluster = sharder.clusters.get(item.item);
+		const worker = cluster.workerID === 1 ? dead : null;
+		worker.send(item.value); // throws: channel closed
+	});
+
+	shardAssignment.installQueueFix(sharder);
+	queue.queueItem({ item: 0, value: { name: 'connect', id: 0 } });
+
+	assert.strictEqual(shardAssignment.libraryDelivered(sharder, 0), false);
+	assert.match(shardAssignment.libraryDeliveryError(sharder, 0), /channel closed/);
+});
+
+test('a successful library send suppresses the fallback (no second client)', () => {
+	const queue = new Queue();
+	const sharder = fakeSharder({ queue });
+	const worker = new FakeWorker(1);
+	queue.on('execute', (item) => worker.send(item.value));
+
+	shardAssignment.installQueueFix(sharder);
+	queue.queueItem({ item: 0, value: { name: 'connect', id: 0 } });
+
+	assert.strictEqual(shardAssignment.libraryDelivered(sharder, 0), true);
+	assert.strictEqual(shardAssignment.libraryDeliveryError(sharder, 0), null);
+});
+
+test('an acknowledgement belongs to one worker, not to a cluster id', () => {
+	const sharder = fakeSharder();
+	// Cluster 0 is now served by worker 7 (the old worker 1 crashed), and that
+	// worker has not acknowledged anything yet.
+	sharder.clusters.set(0, { workerID: 7, firstShardID: 0, lastShardID: 0 });
+	const worker = new FakeWorker(7);
+
+	const report = shardAssignment.deliverPending({
+		sharder,
+		workers: { 7: worker },
+		acknowledgedFor: (entry) => entry.clusterId === 0 && entry.workerId === 1,
+	});
+	assert.strictEqual(report.delivered, 1, 'a new worker gets the assignment again');
+	assert.strictEqual(worker.received.length, 1);
+	assert.strictEqual(worker.received[0].name, 'connect');
+
+	// ... and once *that* worker acknowledges, nothing is sent twice.
+	const again = shardAssignment.deliverPending({
+		sharder,
+		workers: { 7: worker },
+		acknowledgedFor: (entry) => entry.clusterId === 0 && entry.workerId === 7,
+	});
+	assert.strictEqual(again.delivered, 0);
+	assert.deepStrictEqual(again.pending, []);
+	assert.strictEqual(worker.received.length, 1);
+});

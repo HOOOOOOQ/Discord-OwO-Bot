@@ -142,11 +142,18 @@ function deliverPending(options = {}) {
 	const sharder = options.sharder;
 	const workers = options.workers || {};
 	const acknowledged = options.acknowledged || new Set();
+	// An acknowledgement belongs to one *worker*, not to a cluster id: after a
+	// crash the same cluster id is reused by a brand-new worker that has received
+	// nothing yet, so the caller passes a predicate that also compares worker IDs.
+	const isAcknowledged =
+		typeof options.acknowledgedFor === 'function'
+			? (entry) => Boolean(options.acknowledgedFor(entry))
+			: (entry) => acknowledged.has(entry.clusterId);
 	const filter = typeof options.filter === 'function' ? options.filter : () => true;
 	const attempted = [];
 
 	for (const entry of plan(sharder)) {
-		if (acknowledged.has(entry.clusterId)) continue;
+		if (isAcknowledged(entry)) continue;
 		if (!filter(entry, { acknowledged, pending: acknowledged.size === 0 })) continue;
 		const payload = buildConnectPayload(sharder, entry.clusterId);
 		const result = deliver(workers[entry.workerId], payload);
@@ -163,10 +170,77 @@ function deliverPending(options = {}) {
 		attempted,
 		delivered: attempted.filter((entry) => entry.ok).length,
 		pending: plan(sharder)
-			.map((entry) => entry.clusterId)
-			.filter((clusterId) => !acknowledged.has(clusterId)),
-		acknowledged: acknowledged.size,
+			.filter((entry) => !isAcknowledged(entry))
+			.map((entry) => entry.clusterId),
+		acknowledged: plan(sharder).filter((entry) => isAcknowledged(entry)).length,
 	};
+}
+
+/**
+ * REPAIR for eris-sharder 1.10.0's assignment queue (proven defect, see below).
+ *
+ * `node_modules/eris-sharder/src/utils/queue.js`:
+ *
+ *   queueItem(item) {
+ *     if (this.queue.length === 0) { this.queue.push(item); this.executeQueue(); }
+ *     else this.queue.push(item);          // <-- pushed, never executed
+ *   }
+ *   executeQueue() { const item = this.queue[0]; this.emit("execute", item); }
+ *
+ * Nothing ever removes `queue[0]`, so after the **first** assignment the queue is
+ * permanently non-empty and every later `queueItem` (every cluster restart) is
+ * pushed and never sent. The respawned worker therefore never receives
+ * `connect`, never creates an Eris client, and stays "online" with no gateway —
+ * the exact "worker online, bot offline" symptom. The queue array also grows by
+ * one entry per restart (unbounded).
+ *
+ * This replaces the method on the instance only (no node_modules edit):
+ * deliver immediately, remember whether the send worked, and never accumulate.
+ */
+function installQueueFix(sharder) {
+	if (!sharder || !sharder.queue || sharder.queue.__oceanFixed) return false;
+	const queue = sharder.queue;
+	queue.__oceanFixed = true;
+	queue.__oceanDeliveries = new Map();
+	queue.queueItem = function (item) {
+		const clusterId = item && item.item;
+		this.queue = [item];
+		let record = { ok: false, error: 'no listener handled the assignment', at: Date.now() };
+		try {
+			this.emit('execute', item);
+			// The listener is synchronous; if it returned, the send() call did not throw.
+			record = { ok: true, at: Date.now() };
+		} catch (err) {
+			record = {
+				ok: false,
+				error: err && err.message ? err.message : String(err),
+				code: err && err.code,
+				at: Date.now(),
+			};
+		}
+		this.queue = [];
+		if (clusterId !== undefined) this.__oceanDeliveries.set(clusterId, record);
+	};
+	return true;
+}
+
+/**
+ * Did eris-sharder manage to hand the current assignment to the worker?
+ * `false`/unknown means the caller must deliver it itself.
+ */
+function libraryDelivered(sharder, clusterId) {
+	const queue = sharder && sharder.queue;
+	if (!queue || !queue.__oceanDeliveries) return false;
+	const record = queue.__oceanDeliveries.get(clusterId);
+	return Boolean(record && record.ok);
+}
+
+/** The last library-side delivery problem for a cluster, for the log. */
+function libraryDeliveryError(sharder, clusterId) {
+	const queue = sharder && sharder.queue;
+	if (!queue || !queue.__oceanDeliveries) return null;
+	const record = queue.__oceanDeliveries.get(clusterId);
+	return record && record.ok === false ? record.error : null;
 }
 
 module.exports = {
@@ -176,4 +250,7 @@ module.exports = {
 	deliverPending,
 	dropQueuedAssignment,
 	queueState,
+	installQueueFix,
+	libraryDelivered,
+	libraryDeliveryError,
 };

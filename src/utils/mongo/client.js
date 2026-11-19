@@ -215,13 +215,40 @@ async function whenReady(timeoutMs = 30000) {
 		throw err;
 	}
 	const started = Date.now();
+	let lastError = null;
+	let retries = 0;
 	while (Date.now() - started < timeoutMs) {
 		if (store) return store;
-		if (connecting) return await connecting;
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		if (connecting) {
+			try {
+				return await connecting;
+			} catch (err) {
+				lastError = err;
+			}
+			continue;
+		}
+		// Nothing is in flight (a previous connect failed and cleaned up): retry
+		// instead of reporting MONGODB_NOT_READY while the database is simply slow
+		// to come up. One attempt per round, so the timeout above stays honest.
+		retries += 1;
+		if (retries === 1 || retries % 5 === 0) {
+			log.warn(
+				`[MONGO] not connected yet — retrying (${retries})` +
+					(lastError ? `; last error: ${lastError.message}` : '')
+			);
+		}
+		try {
+			return await connect({ attempts: 1 });
+		} catch (err) {
+			lastError = err;
+		}
+		await new Promise((resolve) => setTimeout(resolve, Math.min(250 * retries, 2000)));
 	}
-	const err = new Error('MongoDB connection is not ready');
+	const err = new Error(
+		'MongoDB connection is not ready' + (lastError ? ` (last error: ${lastError.message})` : '')
+	);
 	err.code = 'MONGODB_NOT_READY';
+	if (lastError) err.cause = lastError;
 	throw err;
 }
 

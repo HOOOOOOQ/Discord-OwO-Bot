@@ -313,6 +313,24 @@ test('`o stats`, `o invite` and `o prefix` all answer through their real modules
 	}
 });
 
+test('`oprofile` and `o profile` both reach the profile command', async () => {
+	// The two forms the user asked for explicitly, on a real command module.
+	let n = 0;
+	for (const content of ['oprofile', 'o profile']) {
+		n += 1;
+		const sent = await dispatch(content, {
+			channelId: `3200${n}`,
+			author: { id: `88800000000000000${n}` },
+		});
+		assert.ok(sent.length >= 1, `${content} produced no reply`);
+		assert.doesNotMatch(
+			JSON.stringify(sent),
+			/something went wrong while running that command/i,
+			`${content} threw inside the command body`
+		);
+	}
+});
+
 test('a per-guild prefix from MongoDB overrides the default', async () => {
 	const { redis } = helpBot.main;
 	await redis.hset('444', 'prefix', '!');

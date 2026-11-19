@@ -1014,3 +1014,122 @@ atau `meta.stage` berasal dari command; sisanya `[ERROR]`. Sekarang
 
 **Test.** Terlihat langsung pada output `test/pipeline.test.js`
 (`handled [COMMAND] command=stats …`) dan tidak mengubah hasil `npm test` (264/264).
+
+---
+
+# Putaran 4 — startup & koneksi gateway
+
+Fokus: bot tidak pernah online di Pterodactyl. Semua penyebab di bawah dibuktikan dengan
+menjalankan `node index.js` sungguhan (master + worker eris-sharder) di dalam repo, bukan
+dengan membaca kode saja.
+
+## R4-1 — Cluster yang di-restart tidak pernah menerima tugas shard (penyebab utama)
+
+**Gejala.** Panel menampilkan server "running" dan worker "online", tetapi bot tidak pernah
+muncul Online, tidak ada error, tidak ada log gateway. Restart manual kadang membuat bot
+online sebentar lalu hilang lagi.
+
+**Akar masalah.** `eris-sharder@1.10.0` `src/utils/queue.js`:
+
+```js
+queueItem(item) {
+  if (this.queue.length === 0) { this.queue.push(item); this.executeQueue(); }
+  else this.queue.push(item);          // ditumpuk, tidak pernah dieksekusi
+}
+executeQueue() { const item = this.queue[0]; this.emit("execute", item); }
+```
+
+`queue[0]` tidak pernah dihapus, sehingga setelah tugas pertama antrean selalu terisi dan
+setiap `queueItem` berikutnya (setiap restart cluster) hanya ditumpuk. Pesan `connect` tidak
+pernah dikirim ke worker baru → worker tidak membuat objek Eris sama sekali.
+
+Bukti (probe pada `Queue` dan `cluster.fork`, sebelum perbaikan):
+`lenBefore=0` → dikirim; lalu `lenBefore=1`, `lenBefore=2`, `lenBefore=3` tanpa satu pun
+`master sends "connect"`, dan worker 2/3/4 tidak pernah mengirim `ipc_connect_received`.
+
+**Perbaikan.** `src/utils/shardAssignment.js`:
+
+- `installQueueFix(sharder)` mengganti `queueItem` pada instance: kirim langsung, catat
+  hasil kirim (`{ok, error, code}`), dan kosongkan antrean setiap kali → tidak ada akumulasi
+  dan setiap restart mendapat tugasnya.
+- `libraryDelivered()` / `libraryDeliveryError()` dipakai master untuk tahu apakah pustaka
+  berhasil; fallback hanya mengirim bila pustaka gagal (tidak pernah dobel → tidak ada dua
+  client Eris).
+- `deliverPending()` menerima `acknowledgedFor(entry)` — ack melekat pada **worker**, bukan
+  pada nomor cluster, karena nomor cluster dipakai ulang setelah crash.
+
+**Verifikasi.** `test/shardAssignment.test.js` (+4 tes) dan `test/startup.test.js` yang
+menjalankan `node index.js` sungguhan dan menghitung `ipc_connect_received` dari beberapa
+worker: **4 worker** menerima tugas setelah perbaikan (sebelumnya 1).
+
+## R4-2 — Master tidak berhenti saat semua worker mati (restart tanpa akhir)
+
+**Akar masalah.** eris-sharder me-re-fork worker tanpa batas; kegagalan permanen (token
+salah, intent salah, IP diblokir, DB mati) membuat proses master hidup selamanya. Panel
+menampilkan "running" sehingga tidak ada yang tahu bot tidak pernah online.
+
+**Perbaikan.** `index.js`: 4 kematian worker dalam 60 detik → `[ERROR] crash loop` +
+`[FATAL] stopping the master to end the restart loop` + `exit(1)`.
+`EXIT_ON_CRASH_LOOP=false` mengembalikan perilaku lama.
+
+**Verifikasi.** `test/startup.test.js` menjalankan master dengan token yang ditolak Discord:
+proses berhenti sendiri dengan kode 1 (bukan menggantung) dan log memuat kedua baris di atas.
+
+## R4-3 — `node src/owo.js` keluar tanpa pesan apa pun
+
+**Akar masalah.** `src/owo.js` adalah kelas worker (`class OwO extends Base`) yang dipanggil
+eris-sharder setelah READY. Dijalankan langsung, modul selesai dengan `exit 0` dan tanpa
+output — persis terbaca sebagai "bot gagal terhubung".
+
+**Perbaikan.** Penjaga `if (require.main === module)` di awal file: pesan dua bahasa,
+`node index.js`, `node index.js --doctor`, `exit 1`.
+
+**Verifikasi.** `test/startup.test.js` (spawn proses nyata).
+
+## R4-4 — `MONGODB_NOT_READY` muncul ke user
+
+**Akar masalah.** `whenReady()` hanya menunggu `connecting` yang sedang berjalan; kalau
+`connect()` sudah gagal dan dibersihkan, ia berputar 30 detik lalu melempar
+`MONGODB_NOT_READY` tanpa menyebut sebabnya. Di cluster, koneksi dimulai setelah READY,
+jadi pesan/command yang datang pada detik-detik pertama bisa gagal.
+
+**Perbaikan.**
+
+- `whenReady()` mencoba ulang `connect({attempts:1})` selama timeout, mencatat error terakhir
+  dan menyertakannya di pesan (`... (last error: ...)`) plus `err.cause`.
+- `src/owo.js` menyimpan `this.mongoReady` yang juga memuat `setOptOut()`;
+  `src/eventHandlers/messageCreate.js` menunggu promise itu sebelum memproses pesan.
+
+**Verifikasi.** `test/mongoReady.test.js` (3 tes) dan `test/pipeline.test.js` (command nyata).
+
+## R4-5 — Log startup tidak mengikuti alur yang bisa dibaca non-teknis
+
+**Perbaikan.** `index.js` menulis `[ENV] configuration loaded`, `[DATABASE] connecting/connected`,
+`[DISCORD] connecting to the gateway`; `src/owo.js` dan `src/eventHandlers/ready.js` menulis
+`[DATABASE] connected`, `[DISCORD] successfully connected`, `[BOT] Ready`. Log lama tetap ada
+(`[BOOT]`, `[SHARD]`, `[GATEWAY]`, `[STATE]`, `[HEALTH]`).
+
+## R4-6 — Toko "Bot <token>" membuat shard config gagal (minor)
+
+**Akar masalah.** `resolveShardConfig({token: process.env.BOT_TOKEN})` memakai nilai mentah;
+token berawalan `Bot ` ditolak `GET /gateway/bot` → jumlah shard diam-diam jatuh ke 1.
+
+**Perbaikan.** Token dinormalkan (`tokenUtil.strip(...)`) sebelum dipakai; `BOT_TOKEN`
+sebelumnya sudah dinormalkan untuk client (R2).
+
+## R4-7 — Log percobaan terakhir gateway menyesatkan
+
+`[GATEWAY] connect attempt 2/2 failed — retrying in 32s` padahal tidak ada percobaan lagi.
+Sekarang: `... failed — no attempts left, giving up (reason)` dan `after N attempt(s)`.
+
+## Verifikasi putaran 4 (dijalankan)
+
+| Perintah                                  | Hasil                                                                        |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `MONGO_OFFLINE=true npm test`             | 274 pass / 0 fail (36 file)                                                  |
+| `npm run lint` / `npx prettier --check .` | 0 error / bersih                                                             |
+| `npm run verify:commands`                 | 285 command, 526 alias, 50 admin, 11 grup                                    |
+| `node index.js --doctor`                  | 28 checks, 2 failed (gateway & database — sandbox tanpa jaringan/kredensial) |
+| `node index.js` (MongoDB tak terjangkau)  | `[FATAL]`, exit 1, tanpa fork worker                                         |
+| `node index.js` (token ditolak Discord)   | 4 worker menerima tugas shard, `[FATAL]` crash loop, exit 1                  |
+| `node src/owo.js`                         | exit 1 + arahan `node index.js`                                              |

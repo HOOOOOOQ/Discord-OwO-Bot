@@ -5,6 +5,36 @@
  * For more information, see README.md and LICENSE
  */
 
+// ---------------------------------------------------------------------------
+// Entry-point guard.
+//
+// `src/owo.js` is the eris-sharder **worker class**: nothing in it connects to
+// Discord by itself, and running it directly (`node src/owo.js`) exits with code
+// 0 and no output at all — which looks exactly like "the bot fails to connect".
+// The real entry point is `index.js`.
+// ---------------------------------------------------------------------------
+if (require.main === module) {
+	// eslint-disable-next-line no-console
+	console.error(
+		[
+			'',
+			'src/owo.js TIDAK bisa dijalankan langsung / cannot be started directly.',
+			'File ini adalah kelas worker eris-sharder; tanpa master tidak ada client',
+			'Discord dan tidak ada shard yang dibuat, jadi prosesnya selesai tanpa pesan.',
+			'',
+			'Jalankan entry point yang benar / start the real entry point:',
+			'',
+			'    node index.js',
+			'',
+			'Cek konfigurasi lebih dulu / diagnose first:',
+			'',
+			'    node index.js --doctor',
+			'',
+		].join('\n')
+	);
+	process.exit(1);
+}
+
 const Base = require('eris-sharder').Base;
 const EventHandler = require('./eventHandlers/EventHandler.js');
 
@@ -43,11 +73,24 @@ class OwO extends Base {
 		this.mongoClient = require('./utils/mongo/client.js');
 		this.mysql = require('./utils/mysql.js');
 		this.redis = require('./utils/redis.js');
-		this.mongoReady = this.mongoClient.connect().catch((err) => {
-			log.error(`[MONGO] ${err.message}`);
-			log.error('[ACTION] the bot cannot run without MongoDB — fix MONGODB_URI and restart');
-			process.exit(1);
-		});
+		// Every command, cooldown and prefix lookup needs the database, so the
+		// cluster waits for this promise before handling a single message
+		// (see src/eventHandlers/messageCreate.js). `whenReady()` retries a failed
+		// connection instead of surfacing MONGODB_NOT_READY to users.
+		this.mongoReady = this.mongoClient
+			.connect()
+			.then(async () => {
+				log.info('[DATABASE] connected — cluster is ready to serve commands');
+				await this.setOptOut();
+				return true;
+			})
+			.catch((err) => {
+				log.error(`[DATABASE] ${err.message}`);
+				log.error('[ACTION] the bot cannot run without MongoDB — fix MONGODB_URI and restart');
+				if (err.code) log.error(`[DATABASE] code=${err.code}`);
+				process.exit(1);
+				return false;
+			});
 
 		// Neo4j Logging
 		this.neo4j = require('./utils/neo4j.js');
@@ -73,7 +116,6 @@ class OwO extends Base {
 		this.debug = this.config.debug;
 		this.prefix = this.config.prefix;
 		this.optOut = {};
-		this.setOptOut();
 
 		// Ban check
 		this.ban = require('./utils/ban.js');
@@ -179,6 +221,12 @@ class OwO extends Base {
 	}
 
 	launch() {
+		// eris-sharder calls this only after the client is READY.
+		log.info(
+			`[DISCORD] successfully connected — gateway READY, ${
+				this.bot.guilds ? this.bot.guilds.size : 0
+			} guild(s)`
+		);
 		// Bind bot events
 		this.eventHandler = new EventHandler(this);
 		// The client is already READY when eris-sharder loads this file (it calls
