@@ -1,12 +1,12 @@
-# LAPORAN PENGUJIAN — OCEAN BOT (putaran 4: startup & koneksi gateway)
+# LAPORAN PENGUJIAN — OCEAN BOT (putaran 4–5: startup & koneksi gateway)
 
-Diperbarui: putaran 4, branch `arena/bcde7f93-discord-owo-bot` (lanjutan `master` `9184520`).
+Diperbarui: putaran 5, branch `arena/cc786545-discord-owo-bot` (lanjutan `master` `497ec95`).
 Semua angka di bawah berasal dari perintah yang **benar-benar dijalankan di repo ini**.
 Yang tidak bisa dijalankan di sandbox ditandai **BELUM TERVERIFIKASI** beserta alasannya.
 
 ## 0. Ringkasan: kenapa bot tidak pernah online
 
-Ada **dua** penyebab, keduanya dibuktikan dengan menjalankan `node index.js` sungguhan
+Ada **tiga** penyebab, semuanya dibuktikan dengan menjalankan `node index.js` sungguhan
 (master + worker eris-sharder) di sandbox, bukan dengan membaca kode saja.
 
 ### Penyebab 1 — worker yang di-restart tidak pernah menerima tugas shard-nya
@@ -80,6 +80,62 @@ master menulis `[FATAL] stopping the master to end the restart loop` lalu `exit(
 (bisa dimatikan dengan `EXIT_ON_CRASH_LOOP=false`). Panel kini menampilkan crash, bukan
 server "sehat" yang bohong.
 
+### Penyebab 3 (ditemukan dari log panel Anda, build `4ab00e5c9a45`) — tugas shard dikirim sebelum worker siap mendengarkan
+
+Log Anda:
+
+```
+06:57:13.144  [CLUSTER] worker 1 forked
+06:57:14.285  [cluster:boot] [DATABASE] connecting to MongoDB...
+06:57:19.949  [MONGO] connected — mongodb+srv://***@lagukan…
+06:57:19.952  [GATEWAY] stage sharder_constructed — path /src/owo.js
+06:57:29.28   ERROR [DIAG] stages: process_started=1ms | sharder_constructed=5674ms |
+              ipc_connect_received=NOT REACHED | connect_called=NOT REACHED | …
+```
+
+Master mengirim pesan IPC `connect` **tepat setelah fork** (≈06:57:13.14), tetapi
+eris-sharder baru mendaftarkan listener IPC-nya saat `new Sharder(...)` dibuat —
+yaitu **setelah** pre-flight MongoDB di worker selesai (di host Anda 5,7 detik).
+Pesan yang tiba sebelum ada listener **hilang**: worker hidup, tidak punya objek Eris
+sama sekali, dan tidak ada error.
+
+Diperparah oleh aturan master sebelumnya: fallback hanya mengirim ulang kalau
+`worker.send()` melempar error. `send()` "berhasil" (pesan hanya masuk ke channel),
+jadi master menganggap tugas sudah sampai padahal tidak.
+
+**Perbaikan.**
+
+1. Worker menangkap pesan `connect` di baris-baris pertama `index.js` (sebelum
+   MongoDB/sharder dimuat) dan menyimpannya. Setelah `new Sharder(...)` selesai,
+   pesan itu di-_replay_ (`process.emit('message', …)`) sehingga client Eris benar-benar
+   dibuat. Hanya satu salinan yang di-replay → tidak mungkin dua client.
+2. Master sekarang memakai **ack worker** (`ipc_connect_received`) sebagai satu-satunya
+   bukti: kalau worker belum ack, tugas dikirim ulang pada +4 s, +9 s, +16 s dan lewat
+   sweep tiap 5 detik (selama 2 menit).
+3. Watchdog startup tidak lagi menghitung total waktu boot: **setiap stage memulai ulang
+   hitungan**, jadi worker yang butuh 6 detik memuat modul tidak lagi dilaporkan sebagai
+   "CONNECTION NOT STARTED".
+
+Bukti (reproduksi di sandbox dengan Mongo 6 detik, sebelum vs sesudah):
+
+```
+# sebelum
+[DATABASE] connecting to MongoDB...            (6 s)
+[GATEWAY] stage sharder_constructed
+ERROR [GATEWAY] CONNECTION NOT STARTED         connect_called=NOT REACHED
+
+# sesudah
+[GATEWAY] stage ipc_connect_received — cluster 0
+[GATEWAY] stage ipc_connect_buffered — cluster 0 arrived before eris-sharder was listening
+[GATEWAY] stage sharder_constructed
+WARN [CLUSTER] the shard assignment (cluster 0, shards 0~0) arrived before eris-sharder was
+     listening — replaying it now so the client is created
+[GATEWAY] stage connect_called — Client at 6010ms
+```
+
+Juga: `dd-trace` sekarang **mati secara default** (di log Anda ia mencoba menghubungi
+agen Datadog di `127.0.0.1:8126` dan gagal setiap boot).
+
 ## 1. `node src/owo.js` — kenapa bot tetap gagal terhubung
 
 `src/owo.js` **bukan** entry point: itu kelas worker (`class OwO extends Base`) yang hanya
@@ -104,11 +160,12 @@ src/owo.js TIDAK bisa dijalankan langsung / cannot be started directly.
 | --- | --------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | Syntax seluruh JS                       | `for f in $(git ls-files '*.js'); do node --check "$f"; done` | **PASS** — 0 gagal                                                                                                                                     |
 | 2   | Dependency                              | `npm ci` + `npm ls --depth=0`                                 | **PASS** — 23 paket produksi, tanpa MySQL/Redis                                                                                                        |
-| 3   | Unit + regresi                          | `MONGO_OFFLINE=true npm test`                                 | **PASS** — **274 pass / 0 fail** (36 file)                                                                                                             |
+| 3   | Unit + regresi                          | `MONGO_OFFLINE=true npm test`                                 | **PASS** — **275 pass / 0 fail** (36 file)                                                                                                             |
 | 4   | ESLint / Prettier                       | `npm run lint`, `npx prettier --check .`                      | **PASS** — 0 error, format bersih                                                                                                                      |
 | 5   | Registry command                        | `npm run verify:commands`                                     | **PASS** — 285 command, 526 alias, 50 admin, 11 grup (tidak berkurang)                                                                                 |
 | 6   | Startup `node src/owo.js`               | `node --test test/startup.test.js`                            | **PASS** — exit 1 + arahan `node index.js`                                                                                                             |
 | 7   | Startup `node index.js` (token ditolak) | `node --test test/startup.test.js`                            | **PASS** — urutan log benar, worker baru dapat tugas shard, master exit 1                                                                              |
+| 7b  | Worker lambat (Mongo +4 detik)          | `node --test test/startup.test.js`                            | **PASS** — tugas dibuffer lalu di-replay; `connect_called` tercapai (sebelumnya `NOT REACHED`)                                                         |
 | 8   | Mongo siap sebelum command              | `node --test test/mongoReady.test.js`                         | **PASS** — `whenReady` retry, `MONGODB_NOT_READY` menyertakan sebab asli                                                                               |
 | 9   | Prefix `o`                              | `test/pipeline.test.js`                                       | **PASS** — `ohelp`, `o help`, `OHELP`, `O HELP`, `o ping`, `oprofile`, `o profile`, `o stats`, `o invite`, `o prefix`, prefix custom `!`, typo dijawab |
 | 10  | Diagnostik                              | `node index.js --doctor`                                      | 28 pemeriksaan, **2 gagal** (gateway websocket & database) — keduanya karena sandbox tanpa jaringan/kredensial, lihat §5                               |

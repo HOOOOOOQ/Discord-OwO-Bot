@@ -137,7 +137,7 @@ menampilkan error, bukan server "running" yang sebenarnya tidak pernah online.
 node index.js --doctor        # cek token, intent, MongoDB, presence (aman dijalankan)
 node scripts/verifyDatabase.js  # uji tulis/baca database asli (bot sebaiknya stop)
 node index.js --verify        # pastikan semua command ter-load
-npm test                      # 274 unit + regresi test
+npm test                      # 275 unit + regresi test
 ```
 
 `verifyDatabase.js` menulis data uji dengan akun palsu

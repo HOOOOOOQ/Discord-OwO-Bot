@@ -24,6 +24,12 @@ const { MemoryStore } = require(path.join(ROOT, 'src/utils/mongo/store.js'));
 const store = new MemoryStore();
 store.connect();
 
+// Optional artificial delay: reproduces a host where the worker's MongoDB
+// handshake takes seconds, which is when eris-sharder's IPC listener is
+// registered *after* the master already sent the shard assignment.
+const delayMs = Number.parseInt(process.env.TEST_MONGO_DELAY_MS, 10) || 0;
+const ready = () => (delayMs > 0 ? new Promise((resolve) => setTimeout(resolve, delayMs)) : null);
+
 const target = require.resolve(path.join(ROOT, 'src/utils/mongo/client.js'));
 require.cache[target] = {
 	id: target,
@@ -32,7 +38,10 @@ require.cache[target] = {
 	children: [],
 	paths: [],
 	exports: {
-		connect: async () => store,
+		connect: async () => {
+			await ready();
+			return store;
+		},
 		getStore: () => store,
 		isConnected: () => true,
 		whenReady: async () => store,

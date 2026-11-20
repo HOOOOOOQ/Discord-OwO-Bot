@@ -62,9 +62,11 @@ errors.installProcessHandlers();
 
 // Grab tokens and secret files
 const debug = config.debug;
-// dd-trace is a optional tracing agent: on a 2 GB panel it costs tens of MB of
-// RSS for no benefit. Set DD_TRACE_ENABLED=false to skip loading it entirely.
-if (!debug && String(process.env.DD_TRACE_ENABLED || 'true').toLowerCase() !== 'false') {
+// dd-trace is an optional tracing agent: on a 2 GB panel it costs tens of MB of
+// RSS for no benefit, and with no Datadog agent on the host it prints
+// "DATADOG TRACER DIAGNOSTIC - Agent Error: connect ECONNREFUSED 127.0.0.1:8126"
+// on every boot. Off unless explicitly enabled.
+if (!debug && String(process.env.DD_TRACE_ENABLED || 'false').toLowerCase() !== 'false') {
 	require('dd-trace').init();
 }
 
@@ -81,6 +83,10 @@ const shardAssignment = require('./src/utils/shardAssignment.js');
 const diagnostics = require('./src/utils/diagnostics.js');
 
 var shards, firstShardID, lastShardID;
+
+// Worker-only state for the early IPC capture (see the worker branch below).
+let workerConnectCapture = [];
+let workerSharderReady = false;
 
 // The sharder server of upstream OwO does not exist for self-hosters. Shards now
 // come from SHARDS/SHARD_FIRST/SHARD_LAST, or SHARDER_HOST when configured, or
@@ -202,10 +208,18 @@ function superviseGateway(workerCount, sharder) {
 		}
 	});
 
-	/** A cluster is only "delivered" for the worker that is running right now. */
+	/**
+	 * Delivery state for the worker that is running right now.
+	 *
+	 * The acknowledgement beacon (`ipc_connect_received`, sent from the first
+	 * lines of worker startup) is the only trustworthy signal: `worker.send()`
+	 * can return without error while the child is still booting (Node buffers
+	 * it, the child may emit it before any listener exists), so a "successful"
+	 * library send does not prove the assignment arrived.
+	 */
 	const handleFor = (entry) => {
 		if (ackedBy.get(entry.clusterId) === entry.workerId) return 'acked';
-		return shardAssignment.libraryDelivered(sharder, entry.clusterId) ? 'library' : 'pending';
+		return 'pending';
 	};
 
 	const attempt = (why) => {
@@ -230,7 +244,7 @@ function superviseGateway(workerCount, sharder) {
 				log.warn(
 					`[CLUSTER] sent the shard assignment for cluster ${entry.clusterId} (shards ` +
 						`${entry.firstShardID}~${entry.lastShardID}) to worker ${entry.workerId} directly — ` +
-						`eris-sharder did not deliver it${reason ? ` (${reason})` : ''}` +
+						`the worker never acknowledged it${reason ? ` (${reason})` : ''}` +
 						(why ? ` [${why}]` : '') +
 						` (attempt ${previous})`
 				);
@@ -247,7 +261,9 @@ function superviseGateway(workerCount, sharder) {
 	// Every new worker gets its own attempts: a respawn (crash, panel restart of a
 	// cluster, OOM) starts with an empty acknowledgement, and the library may or
 	// may not have managed the send.
-	const forkAttempts = [1200, 3500, 8000];
+	// Grace before the first retry: a worker needs ~1 s to even start (Node + the
+	// module tree), and its acknowledgement arrives a few ms after that.
+	const forkAttempts = [4000, 9000, 16000];
 	cluster.on('fork', () => {
 		for (const delay of forkAttempts) {
 			const timer = setTimeout(() => attempt('respawn'), delay);
@@ -287,7 +303,7 @@ function superviseGateway(workerCount, sharder) {
 
 	// First attempt as soon as the plan exists (the fork handler above already
 	// covers workers, this covers a plan that appears before any fork event).
-	for (const delay of [1500, 6000]) {
+	for (const delay of [5000, 12000]) {
 		const t = setTimeout(() => attempt('boot'), delay);
 		if (typeof t.unref === 'function') t.unref();
 	}
@@ -329,6 +345,29 @@ function superviseGateway(workerCount, sharder) {
 		if (cluster.isWorker) {
 			// Early worker logs otherwise carry the master identity.
 			log.setIdentity('cluster:boot');
+			// ----------------------------------------------------------------
+			// The master sends the shard assignment ("connect") immediately
+			// after fork, but eris-sharder only registers its IPC listener when
+			// the Sharder is constructed — which happens AFTER the MongoDB
+			// pre-flight below and therefore seconds later on a real host
+			// (measured: 5.7 s in the field). A message that arrives before a
+			// listener exists is emitted into the void: the worker then sits
+			// "online" with no Eris client, exactly as reported.
+			//
+			// So capture it here (first thing in the worker) and replay it once
+			// eris-sharder is listening.
+			// ----------------------------------------------------------------
+			workerConnectCapture = [];
+			process.prependListener('message', (message) => {
+				if (!message || message.name !== 'connect') return;
+				if (workerSharderReady) return; // the library listener handles it
+				if (workerConnectCapture.length) return; // never queue a second copy
+				workerConnectCapture.push(message);
+				gatewayBoot.markStage(
+					'ipc_connect_buffered',
+					`cluster ${message.id} arrived before eris-sharder was listening — replaying after init`
+				);
+			});
 			// Must run before eris-sharder creates the client: eris defaults to
 			// presence "offline" inside IDENTIFY, and the worker has no listeners
 			// until READY. See src/utils/gatewayBoot.js.
@@ -515,10 +554,27 @@ function superviseGateway(workerCount, sharder) {
 		}
 
 		if (cluster.isWorker) {
+			// From now on eris-sharder's own listener is registered, so new
+			// messages must go straight to it (never through the buffer, that
+			// would create a second Eris client).
+			workerSharderReady = true;
 			gatewayBoot.markStage('sharder_constructed', `path ${config.sharder.path}`);
-			log.info(
-				'[BOOT] eris-sharder Master constructed in the worker — waiting for the shard assignment over IPC'
-			);
+			if (workerConnectCapture.length) {
+				const pending = workerConnectCapture[0];
+				workerConnectCapture.length = 0;
+				log.warn(
+					`[CLUSTER] the shard assignment (cluster ${pending.id}, shards ` +
+						`${pending.firstShardID}~${pending.lastShardID}) arrived before eris-sharder was ` +
+						`listening — replaying it now so the client is created`
+				);
+				gatewayBoot.markStage('ipc_connect_replayed', `cluster ${pending.id}`);
+				// Same event eris-sharder's Cluster.spawn() listens to.
+				process.emit('message', pending, null);
+			} else {
+				log.info(
+					'[BOOT] eris-sharder Master constructed in the worker — waiting for the shard assignment over IPC'
+				);
+			}
 		}
 
 		if (cluster.isMaster) {

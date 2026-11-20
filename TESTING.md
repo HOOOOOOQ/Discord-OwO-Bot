@@ -15,7 +15,7 @@ npm run audit             # npm audit --omit=dev
 `npm ci` must succeed before any of the above (see DEPLOYMENT.md for the native
 `canvas` prerequisites). Always set `MONGO_OFFLINE=true` for offline runs: a few
 modules touch the Mongo client at require-time and would otherwise try to
-connect. **Result of the last full run: 274 pass / 0 fail (36 test files, ~21 s).**
+connect. **Result of the last full run: 275 pass / 0 fail (36 test files, ~46 s).**
 
 ## Test layout
 
@@ -101,6 +101,14 @@ For the full stack: `docker compose up -d mongo` (commented service) and
 `MemoryStore`. Discord is **not** reachable in CI/sandbox, so the token is rejected and the
 gateway path ends at `[FATAL]` — which is exactly the branch under test (assignment
 re-delivery + crash-loop exit). A real READY still needs a token and a network route.
+
+One test sets `TEST_MONGO_DELAY_MS=4000` on top of that fixture to reproduce the
+field failure where the worker boots slowly: the master's `connect` message arrives
+before eris-sharder registers its IPC listener, the worker buffers it
+(`[GATEWAY] stage ipc_connect_buffered`), replays it after `new Sharder(...)`
+(`replaying it now so the client is created`) and finally reaches
+`[GATEWAY] stage connect_called`. Before that fix the run ended with
+`ipc_connect_received=NOT REACHED` and no Eris client at all.
 
 ## What is _not_ covered yet
 
