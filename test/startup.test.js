@@ -127,3 +127,51 @@ test(
 		assert.strictEqual(result.code, 1, 'the panel must see a crash, not a healthy server');
 	}
 );
+
+test(
+	'the shard assignment is replayed when it arrives before eris-sharder listens',
+	{ timeout: 120000 },
+	async () => {
+		// The field failure: the worker's MongoDB handshake takes seconds, so
+		// eris-sharder registers its IPC listener long after the master sent
+		// "connect". Node emits the message into the void and the worker never
+		// creates an Eris client. The worker now buffers it and replays it.
+		const result = await run(['index.js'], {
+			timeout: 90000,
+			env: {
+				BOT_TOKEN: 'Bot invalid.token.for.tests',
+				MONGODB_URI: 'mongodb://memory/ocean',
+				GATEWAY_PROBE_ON_BOOT: 'false',
+				GATEWAY_CONNECT_ATTEMPTS: '1',
+				CLUSTERS: '1',
+				TEST_MONGO_DELAY_MS: '4000',
+				NODE_OPTIONS: `--require ${STUB}`,
+			},
+		});
+
+		const output = result.stdout + result.stderr;
+		assert.strictEqual(result.killedByTimer, false);
+
+		assert.match(
+			output,
+			/\[GATEWAY\] stage ipc_connect_buffered/,
+			'the early assignment was captured instead of dropped'
+		);
+		assert.match(
+			output,
+			/replaying it now so the client is created/,
+			'the captured assignment was replayed after eris-sharder was listening'
+		);
+		assert.match(
+			output,
+			/\[GATEWAY\] stage connect_called/,
+			'Eris Client#connect() ran, which never happened before the fix'
+		);
+		// The slow start must not be misreported as "the assignment never arrived".
+		assert.doesNotMatch(
+			output,
+			/eris-sharder never created an Eris client in this worker/,
+			'a delayed worker was diagnosed as a missing assignment'
+		);
+	}
+);

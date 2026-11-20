@@ -100,6 +100,8 @@ const state = {
 	activeRange: null,
 	watchdogArmed: false,
 	watchdogReported: false,
+	watchdogTimer: null,
+	watchdogTimeoutMs: null,
 };
 
 /** Records and logs one observed gateway transition. */
@@ -162,6 +164,11 @@ function markStage(stage, detail) {
 	if (stage === 'websocket_open') state.websocketOpened = true;
 	log.info(`[GATEWAY] stage ${stage}${detail ? ` — ${detail}` : ''}`);
 	reportStage(stage, detail);
+	// A worker can take seconds to load (native canvas, dd-trace, MongoDB), so
+	// the watchdog measures *inactivity*, not total startup time: every stage
+	// restarts the clock. Without this a slow host produced a false
+	// "CONNECTION NOT STARTED" while it was still initialising.
+	scheduleStartupWatchdog();
 }
 
 function reportStage(stage, detail) {
@@ -235,7 +242,19 @@ function formatDiagnostics(snapshot) {
 function armStartupWatchdog(env = process.env, options = {}) {
 	if (state.watchdogArmed) return;
 	state.watchdogArmed = true;
-	const timeoutMs = options.timeoutMs || connectTimeoutMs(env);
+	state.watchdogTimeoutMs = options.timeoutMs || connectTimeoutMs(env);
+	scheduleStartupWatchdog();
+	log.debug(
+		`[GATEWAY] startup watchdog armed (${state.watchdogTimeoutMs}ms, restarts on progress)`
+	);
+	return state.watchdogTimer;
+}
+
+/** (Re)arms the one-shot startup report; no-op once READY or already reported. */
+function scheduleStartupWatchdog() {
+	if (!state.watchdogArmed || state.watchdogReported || state.readySeenAt) return null;
+	const timeoutMs = state.watchdogTimeoutMs || connectTimeoutMs(process.env);
+	if (state.watchdogTimer) clearTimeout(state.watchdogTimer);
 	const timer = setTimeout(() => {
 		if (state.readySeenAt || state.watchdogReported) return;
 		state.watchdogReported = true;
@@ -245,7 +264,12 @@ function armStartupWatchdog(env = process.env, options = {}) {
 			log.error('[GATEWAY] CONNECTION NOT STARTED');
 			log.error('[DIAG] Worker is alive but no Gateway connection was initiated.');
 			log.error('[DIAG] Check Eris client initialization and connect() execution.');
-			if (!state.stages.has('ipc_connect_received')) {
+			if (state.stages.has('ipc_connect_buffered') && !state.stages.has('ipc_connect_replayed')) {
+				log.error(
+					'[DIAG] The shard assignment arrived BEFORE eris-sharder registered its IPC listener and ' +
+						'the worker never replayed it — that is a bug in this build, not in Discord.'
+				);
+			} else if (!state.stages.has('ipc_connect_received')) {
 				log.error(
 					'[DIAG] The shard assignment (IPC "connect" message) was never received from the master — ' +
 						'eris-sharder never created an Eris client in this worker.'
@@ -281,7 +305,7 @@ function armStartupWatchdog(env = process.env, options = {}) {
 		reportStage('watchdog_fired', `first_missing=${snapshot.firstMissing}`);
 	}, timeoutMs);
 	if (typeof timer.unref === 'function') timer.unref();
-	log.debug(`[GATEWAY] startup watchdog armed (${timeoutMs}ms)`);
+	state.watchdogTimer = timer;
 	return timer;
 }
 

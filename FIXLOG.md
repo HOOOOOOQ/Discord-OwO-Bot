@@ -1133,3 +1133,103 @@ Sekarang: `... failed — no attempts left, giving up (reason)` dan `after N att
 | `node index.js` (MongoDB tak terjangkau)  | `[FATAL]`, exit 1, tanpa fork worker                                         |
 | `node index.js` (token ditolak Discord)   | 4 worker menerima tugas shard, `[FATAL]` crash loop, exit 1                  |
 | `node src/owo.js`                         | exit 1 + arahan `node index.js`                                              |
+
+## Round 5 (R5) — the worker never received its shard assignment
+
+Field evidence (build `4ab00e5c9a45`, panel logs, worker pid 46):
+
+```
+13.144 [CLUSTER] worker 1 forked
+14.285 [DATABASE] connecting to MongoDB...
+19.949 [MONGO] connected
+19.952 [GATEWAY] stage sharder_constructed — path /src/owo.js   (5674 ms after fork)
+29.28  ERROR [DIAG] ipc_connect_received=NOT REACHED | connect_called=NOT REACHED
+```
+
+The bot process was alive, MongoDB was connected, no Eris client ever existed.
+
+### R5-1 — `connect` sent before eris-sharder's IPC listener exists
+
+`ClusterManager` emits `connect` right after `fork()`. The worker registers
+`process.on('message', …)` only inside `new Sharder(...)`, which `src/owo.js`
+constructs _after_ the MongoDB pre-flight. On a real panel that is ~5.7 s later,
+so the message is emitted into a channel with no listener and is gone.
+
+Fix (`index.js`, worker branch, first statements):
+
+```js
+workerConnectCapture = [];
+process.prependListener('message', (message) => {
+	if (!message || message.name !== 'connect') return;
+	if (workerSharderReady) return; // library listener owns it
+	if (workerConnectCapture.length) return; // never queue a second copy
+	workerConnectCapture.push(message);
+	gatewayBoot.markStage('ipc_connect_buffered', '…');
+});
+```
+
+and immediately after the `Sharder` is constructed:
+
+```js
+workerSharderReady = true;
+if (workerConnectCapture.length) {
+	const pending = workerConnectCapture[0];
+	workerConnectCapture.length = 0;
+	gatewayBoot.markStage('ipc_connect_replayed', `cluster ${pending.id}`);
+	process.emit('message', pending, null); // exactly what Cluster.spawn() listens for
+}
+```
+
+Only one copy is replayed, so a second message can never create a second Eris
+client. `prependListener` guarantees we run before the library's listener, and
+`workerSharderReady` is flipped synchronously, so there is no window where both
+paths handle the same message.
+
+### R5-2 — master treated a successful `worker.send()` as delivery
+
+The fallback delivered only when `shardAssignment.libraryDelivered()` was false.
+`worker.send()` returning without a throw only proves the payload entered the
+channel; if the child had no listener the assignment was still lost, and the
+master skipped the retry (that is exactly the `[DIAG] No worker received the
+shard assignment over IPC` line while the library reported success).
+
+Fix (`index.js`): the worker's acknowledgement beacon is the only proof.
+
+```js
+const handleFor = (entry) => {
+	if (ackedBy.get(entry.clusterId) === entry.workerId) return 'acked';
+	return 'pending';
+};
+```
+
+Retries are now `+4 s`, `+9 s`, `+16 s` after fork plus the existing 5 s sweep
+(up to `startedAt + 120 s`). Because a worker acks within milliseconds of
+startup, the first retry already sees the ack and no duplicate is sent; if the
+message really was lost, the retry lands in the worker's buffer and is replayed.
+
+### R5-3 — startup watchdog measured total time, not inactivity
+
+`armStartupWatchdog()` armed one timer at fork. With a 5.7 s module load the
+worker was declared "CONNECTION NOT STARTED" while it was still initialising.
+`markStage()` now re-arms the timer (`scheduleStartupWatchdog()`), so the
+watchdog reports a stall only after `GATEWAY_CONNECT_TIMEOUT_MS` (15 s) with
+**no progress at all**. Added `ipc_connect_buffered` / `ipc_connect_replayed`
+stages and a diagnostic line for "arrived early but was never replayed".
+
+### R5-4 — dd-trace no longer loads by default
+
+The panel log showed `DATADOG TRACER CONFIGURATION …` plus
+`WARN DATADOG TRACER DIAGNOSTIC - Agent Error … ECONNREFUSED 127.0.0.1:8126` on
+every boot: tens of MB of RSS and startup time for an agent that does not exist
+on a Pterodactyl host. `DD_TRACE_ENABLED` now defaults to `false` (opt-in).
+
+### Verification
+
+- Reproduction with a 6 s MongoDB stub: before → `connect_called=NOT REACHED`;
+  after → `ipc_connect_buffered` → `sharder_constructed` → `ipc_connect_replayed`
+  → `connect_called — Client at 6010ms`.
+- New regression test in `test/startup.test.js` (real master + worker,
+  `TEST_MONGO_DELAY_MS=4000`).
+- `npm test` → **275 pass / 0 fail** (36 files); eslint + prettier clean.
+- Real Discord READY still **BELUM TERVERIFIKASI**: the sandbox has no route to
+  Discord (REST → ECONNRESET).
